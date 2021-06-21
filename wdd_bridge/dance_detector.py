@@ -17,6 +17,9 @@ class Dance:
         self.timestamps = []
         self.triggered = 0
 
+    def get_first_timestamp(self):
+        return self.timestamps[0]
+
     def get_last_timestamp(self):
         return self.timestamps[-1]
 
@@ -43,7 +46,14 @@ class Dance:
 
 
 class DanceDetector:
-    def __init__(self, min_distance=200.0, min_delay=5.0, min_waggles=3, print_fn=None):
+    def __init__(
+        self,
+        min_distance=200.0,
+        min_delay=7.0,
+        min_waggles=3,
+        print_fn=None,
+        log_fn=None,
+    ):
 
         self.min_distance = min_distance
         self.min_delay = min_delay
@@ -51,6 +61,7 @@ class DanceDetector:
 
         self.open_dances = []
         self.print_fn = print_fn
+        self.log_fn = log_fn
 
     def get_dance_positions(self):
         positions = []
@@ -61,12 +72,12 @@ class DanceDetector:
     def process(self, waggle):
 
         indices_to_delete = []
-        result_coordinates = []
 
         added = False
 
         for idx, dance in enumerate(self.open_dances):
-            offset = (waggle.timestamp - dance.get_last_timestamp()).total_seconds()
+            last_waggle_timestamp = dance.get_last_timestamp()
+            offset = (waggle.timestamp - last_waggle_timestamp).total_seconds()
             if offset > self.min_delay or offset < 0:
                 indices_to_delete.append(idx)
                 continue
@@ -77,7 +88,13 @@ class DanceDetector:
             dance.append(waggle)
             if len(dance) >= self.min_waggles:
                 dance.trigger()
-                result_coordinates.append((waggle.x, waggle.y))
+                yield (waggle.x, waggle.y)
+
+                self.log_fn(
+                    "detected dance",
+                    first_waggle=dance.get_first_timestamp(),
+                    last_timestamp=dance.get_last_timestamp(),
+                )
 
             added = True
             break
@@ -89,5 +106,3 @@ class DanceDetector:
             dance = Dance()
             dance.append(waggle)
             self.open_dances.append(dance)
-
-        return result_coordinates

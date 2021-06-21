@@ -23,6 +23,10 @@ import click
     is_flag=True,
     help="Output arrows in the UI based on waggle direction.",
 )
+@click.option(
+    "--stats-file",
+    help="Filename to log advanced statistics to. Each line is a json object.",
+)
 def main(**kwargs):
 
     print("Initializing bridge..", flush=True)

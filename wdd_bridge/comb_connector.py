@@ -5,7 +5,7 @@ import threading
 
 
 class CombConnector:
-    def __init__(self, port, print_fn):
+    def __init__(self, port, print_fn, log_fn):
 
         self.dummy_mode = not port
 
@@ -21,6 +21,7 @@ class CombConnector:
             self.con = None
 
         self.print_fn = print_fn
+        self.log_fn = log_fn
 
         self.output_queue = queue.Queue()
 

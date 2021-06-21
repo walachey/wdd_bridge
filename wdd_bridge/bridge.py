@@ -2,6 +2,7 @@ from .wdd_listener import WDDListener
 from .dance_detector import DanceDetector
 from .comb_connector import CombConnector
 from .comb_mapper import CombMapper
+from .statistics import Statistics
 
 import asciimatics
 import asciimatics.screen
@@ -10,57 +11,81 @@ import numpy as np
 
 
 class Bridge:
-    def __init__(self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows):
+    def __init__(
+        self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file
+    ):
         self.wdd_port = wdd_port
         self.wdd_authkey = wdd_authkey
         self.comb_port = comb_port
         self.draw_arrows = draw_arrows
 
+        # Advanced logging.
+        if stats_file:
+            self.statistics = Statistics(filename=stats_file)
+            self.log_fn = self.statistics.log
+        else:
+            self.statistics = None
+            self.log_fn = lambda _, **_kwargs: None
+
+        # Printing in the UI.
         self.log = []
 
         def print_fn(x):
             self.log.append(
-                "[{}] {}".format(datetime.datetime.now().time().isoformat(), x)
+                "[{}] {}".format(datetime.datetime.utcnow().time().isoformat(), x)
             )
+            if self.statistics is not None:
+                self.log_fn("log", text=x)
 
         self.print_fn = print_fn
 
+        self.running = True
+
         print("Initializing WDD connection..", flush=True)
-        self.wdd = WDDListener(port=wdd_port, authkey=wdd_authkey, print_fn=print_fn)
-        self.dance_detector = DanceDetector(print_fn=print_fn)
+        self.wdd = WDDListener(
+            port=wdd_port, authkey=wdd_authkey, print_fn=print_fn, log_fn=self.log_fn
+        )
+        self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn)
         self.comb_mapper = CombMapper(config_path=comb_config)
         print("Initializing serial connection..", flush=True)
-        self.comb = CombConnector(port=comb_port, print_fn=print_fn)
+        self.comb = CombConnector(port=comb_port, print_fn=print_fn, log_fn=self.log_fn)
 
         self.screen = None
 
     def stop(self):
-        self.running = False
-        self.wdd.close()
-        self.comb.close()
-        if self.screen is not None:
-            self.screen.close()
+        if self.running:
+            self.log_fn("stopping execution")
+            self.running = False
+            self.wdd.close()
+            self.comb.close()
+            if self.statistics is not None:
+                self.statistics.close()
+
+            if self.screen is not None:
+                self.screen.close()
 
     def run(self):
 
-        self.running = True
+        self.log_fn("starting execution")
+        try:
+            while self.running:
+                self.run_ui()
+                # Poll with a timeout, so we can e.g. interrupt the process.
+                waggle_info = self.wdd.get_message(block=True, timeout=1.0)
 
-        while self.running:
-            self.run_ui()
-            # Poll with a timeout, so we can e.g. interrupt the process.
-            waggle_info = self.wdd.get_message(block=True, timeout=1.0)
+                if not self.running:
+                    self.stop()
+                    break
 
-            if not self.running:
-                self.stop()
-                break
+                if not waggle_info:
+                    continue
+                coordinates = self.dance_detector.process(waggle_info)
 
-            if not waggle_info:
-                continue
-            coordinates = self.dance_detector.process(waggle_info)
-
-            for (x, y) in coordinates:
-                self.print_fn("Activating vibration")
-                self.comb.send_message("brrt")
+                for (x, y) in coordinates:
+                    self.print_fn("Activating vibration")
+                    self.comb.send_message("brrt")
+        finally:
+            self.stop()
 
     def run_ui(self):
         def ui(screen):
@@ -123,7 +148,7 @@ class Bridge:
                 )
 
             screen.print_at(
-                datetime.datetime.now().isoformat(),
+                datetime.datetime.utcnow().isoformat(),
                 1,
                 1,
                 colour=asciimatics.screen.Screen.COLOUR_CYAN,

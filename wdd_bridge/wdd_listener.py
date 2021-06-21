@@ -1,3 +1,4 @@
+import datetime
 import multiprocessing.connection
 import queue
 import threading
@@ -6,13 +7,14 @@ from .dance_detector import Waggle
 
 
 class WDDListener:
-    def __init__(self, port, authkey, print_fn):
+    def __init__(self, port, authkey, print_fn, log_fn):
 
         self.listener = multiprocessing.connection.Listener(
             ("localhost", port), authkey=authkey.encode()
         )
 
         self.print_fn = print_fn
+        self.log_fn = log_fn
 
         self.incoming_queue = queue.Queue()
 
@@ -52,8 +54,11 @@ class WDDListener:
                         message["x"], message["y"], angle, message["timestamp_waggle"]
                     )
                     self.print_fn(
-                        "WDD: received waggle detected at {}".format(
-                            message["system_timestamp_waggle"]
+                        "WDD: received waggle detected {}s ago".format(
+                            (
+                                datetime.datetime.utcnow()
+                                - message["system_timestamp_waggle"]
+                            ).total_seconds()
                         )
                     )
                     self.incoming_queue.put(waggle)
@@ -65,6 +70,7 @@ class WDDListener:
         if l is not None:
             l.close()
         self.incoming_queue.put(None)
+        # Don't join the listener thread here because it might be hanging on trying to get a connection.
         self.listener_thread.join()
 
     def get_message(self, block=True, timeout=None):
