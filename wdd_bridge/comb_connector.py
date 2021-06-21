@@ -35,6 +35,7 @@ class CombConnector:
         if self.con and self.con.isOpen():
             self.con.close()
 
+        self.output_queue.put(None)
         self.listener_thread.join()
 
     def run_connector(self):
@@ -57,6 +58,8 @@ class CombConnector:
             while True:
 
                 message = self.output_queue.get()
+                if message is None:
+                    break
 
                 if not self.con.isOpen():
                     self.print_fn("Comb: Serial connection broken. Message dropped.")
