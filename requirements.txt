@@ -1,0 +1,6 @@
+numpy
+scipy
+multiprocessing_generator
+iso8601
+asciimatics
+pyserial
