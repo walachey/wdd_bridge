@@ -1,6 +1,6 @@
 from .wdd_listener import WDDListener
 from .dance_detector import DanceDetector
-from .comb_connector import CombConnector
+from .comb_connector import CombConnector, CombTriggerActuatorMessage
 from .comb_mapper import CombMapper
 from .statistics import Statistics
 
@@ -48,7 +48,12 @@ class Bridge:
         self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn)
         self.comb_mapper = CombMapper(config_path=comb_config)
         print("Initializing serial connection..", flush=True)
-        self.comb = CombConnector(port=comb_port, print_fn=print_fn, log_fn=self.log_fn)
+        self.comb = CombConnector(
+            port=comb_port,
+            actuator_count=self.comb_mapper.get_actuator_count(),
+            print_fn=print_fn,
+            log_fn=self.log_fn,
+        )
 
         self.screen = None
 
@@ -83,7 +88,11 @@ class Bridge:
 
                 for (x, y) in coordinates:
                     self.print_fn("Activating vibration")
-                    self.comb.send_message("brrt")
+
+                    xy, (idx, distance) = self.comb_mapper.map_to_comb(x, y)
+                    self.comb.send_message(
+                        CombTriggerActuatorMessage(idx, signal_index=1, side=1)
+                    )
         finally:
             self.stop()
 

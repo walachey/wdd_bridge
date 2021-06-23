@@ -21,6 +21,9 @@ class CombMapper:
             self.pixel_coordinates, self.unit_coordinates
         )
 
+    def get_actuator_count(self):
+        return len(self.actuators)
+
     def get_comb_rectangle(self):
         return (
             self.unit_coordinates[:, 0].min(),

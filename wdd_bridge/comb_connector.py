@@ -1,12 +1,74 @@
+import datetime
 import queue
 import serial
 import time
 import threading
 
 
-class CombConnector:
-    def __init__(self, port, print_fn, log_fn):
+class CombActuatorMessage:
+    def is_activation_message(self):
+        return False
 
+    def is_deactivation_message(self):
+        return False
+
+
+class CombTriggerActuatorMessage(CombActuatorMessage):
+    # The default constructor deactivates the signal for the given actuator.
+    def __init__(
+        self, actuator_index, signal_duration=1.0, signal_index=None, side=None
+    ):
+        self.actuator_index = actuator_index
+        self.signal_duration = signal_duration
+        self.signal_index = signal_index
+        self.side = side
+
+    def __str__(self):
+        if self.is_deactivation_message():
+            return "mux {} 0".format(self.actuator_index)
+        return "mux {} {} {}".format(self.actuator_index, self.signal_index, self.side)
+
+    def is_deactivation_message(self):
+        return not self.signal_index
+
+    def is_activation_message(self):
+        return not self.is_deactivation_message()
+
+    def get_deactivation_message(self):
+        return self.signal_duration, CombTriggerActuatorMessage(self.actuator_index)
+
+    def get_actuator_index(self):
+        return self.actuator_index
+
+
+class Actuator:
+    """We need to keep a virtual sensor map around so two simultaneuos signals for one sensor don't interefere."""
+
+    def __init__(self):
+        self.active_until = None
+
+    def is_active(self, dt=None):
+        if self.active_until is None:
+            return False
+
+        if dt is None:
+            dt = datetime.datetime.utcnow()
+        return (self.active_until - dt).total_seconds() > 0e-3
+
+    def set_active_for(self, seconds):
+        self.set_active_until(
+            datetime.datetime.utcnow() + datetime.timedelta(seconds=seconds)
+        )
+
+    def set_active_until(self, timestamp):
+        self.active_until = timestamp
+
+
+class CombConnector:
+    def __init__(self, port, actuator_count, print_fn, log_fn, character_delay=0.001):
+
+        self.actuators = [Actuator() for i in range(actuator_count)]
+        self.character_delay = character_delay
         self.dummy_mode = not port
 
         if not self.dummy_mode:
@@ -64,8 +126,44 @@ class CombConnector:
                 if not self.con.isOpen():
                     self.print_fn("Comb: Serial connection broken. Message dropped.")
                     break
-
-                self.con.write(message)
+                self._send_serial_message(message)
 
     def send_message(self, message):
         self.output_queue.put(message)
+
+    def _send_serial_message(self, message):
+
+        # Potentially schedule deactivation.
+        def schedule_deactivation(delay, deactivation_message):
+            time.sleep(delay)
+            self.output_queue.put(deactivation_message)
+
+        if message.is_activation_message():
+
+            delay, deactivation_message = message.get_deactivation_message()
+            self.actuators[message.get_actuator_index()].set_active_for(delay)
+
+            scheduling_thread = threading.Thread(
+                target=schedule_deactivation,
+                args=(delay, deactivation_message),
+                kwargs=(),
+            )
+            scheduling_thread.start()
+        elif message.is_deactivation_message():
+            # Only deactivate if no other message activated it in the meantime.
+            if self.actuators[message.get_actuator_index()].is_active():
+                self.print_fn("Skipping actuator deactivation.")
+                return
+
+        message = (message.upper() + "\r\n").encode("utf-8")
+
+        self.log_fn(
+            "serial message", text=message, character_delay=self.character_delay
+        )
+
+        if not self.character_delay:
+            self.con.write(message)
+        else:
+            for char in message:
+                self.con.write(char)
+                time.sleep(self.character_delay)
