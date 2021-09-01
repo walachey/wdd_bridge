@@ -7,7 +7,33 @@ from .statistics import Statistics
 import asciimatics
 import asciimatics.screen
 import datetime
+import json
 import numpy as np
+
+
+class HiveSide:
+    """In case a single frame is recorded from both sides, they need separate dance clustering and homography mappings."""
+
+    def __init__(self, cam_id, log_fn, print_fn, comb_config):
+        self.cam_id = cam_id
+        self.log_fn = log_fn
+        self.print_fn = print_fn
+
+        self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn)
+        self.comb_mapper = CombMapper(config_path=comb_config)
+
+    def close(self):
+        pass
+
+    def process(self, waggle_info):
+        coordinates = self.dance_detector.process(waggle_info)
+
+        for (x, y) in coordinates:
+            self.print_fn("Activating vibration")
+
+            xy, (idx, distance) = self.comb_mapper.map_to_comb(x, y)
+
+            yield CombTriggerActuatorMessage(idx, signal_index=1, side=1)
 
 
 class Bridge:
@@ -41,12 +67,24 @@ class Bridge:
 
         self.running = True
 
+        with open(comb_config, "r") as f:
+            config = json.load(f)
+
+        self.cameras = dict()
+        for camera_config in config["cameras"]:
+            self.cameras[camera_config["cam_id"]] = HiveSide(
+                cam_id=camera_config["cam_id"],
+                log_fn=self.log_fn,
+                print_fn=self.print_fn,
+                comb_config=camera_config,
+            )
+        print("Loaded configs for {} cameras.".format(len(self.cameras)))
+
         print("Initializing WDD connection..", flush=True)
         self.wdd = WDDListener(
             port=wdd_port, authkey=wdd_authkey, print_fn=print_fn, log_fn=self.log_fn
         )
-        self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn)
-        self.comb_mapper = CombMapper(config_path=comb_config)
+
         print("Initializing serial connection..", flush=True)
         self.comb = CombConnector(
             port=comb_port,
@@ -63,6 +101,9 @@ class Bridge:
             self.running = False
             self.wdd.close()
             self.comb.close()
+            for cam in self.cameras:
+                cam.close()
+
             if self.statistics is not None:
                 self.statistics.close()
 
@@ -84,15 +125,14 @@ class Bridge:
 
                 if not waggle_info:
                     continue
-                coordinates = self.dance_detector.process(waggle_info)
+                waggle_cam_id = waggle_info["cam_id"]
+                if waggle_cam_id not in self.cameras:
+                    self.print_fn("Received waggle for invalid camera ID.")
+                messages = self.cameras[waggle_cam_id].process(waggle_info)
 
-                for (x, y) in coordinates:
-                    self.print_fn("Activating vibration")
+                for message in messages:
+                    self.comb.send_message(message)
 
-                    xy, (idx, distance) = self.comb_mapper.map_to_comb(x, y)
-                    self.comb.send_message(
-                        CombTriggerActuatorMessage(idx, signal_index=1, side=1)
-                    )
         finally:
             self.stop()
 
@@ -137,19 +177,26 @@ class Bridge:
 
             # Draw current open dances.
             arrows = ["→", "↗", "↑", "↖", "←", "↙", "↓", "↘", "→"]
-            for dance_positions in self.dance_detector.get_dance_positions():
-                for idx, ((x, y), o) in enumerate(dance_positions):
-                    xy, _ = self.comb_mapper.map_to_comb(x, y, find_sensor=False)
-                    char = "." if idx < len(dance_positions) - 1 else "o"
-                    if self.draw_arrows and o is not None:
-                        o = o / np.pi * 180
-                        o = (o + 360) % 360
-                        char = arrows[int(round(o / 45, 0))]
-                    draw_at_comb_position(
-                        xy, char=char, color=asciimatics.screen.Screen.COLOUR_YELLOW
-                    )
+            side_colors = [
+                asciimatics.screen.Screen.COLOUR_YELLOW,
+                asciimatics.screen.Screen.COLOUR_CYAN,
+            ]
+            for side_index, hive_side in enumerate(self.cameras):
+                for dance_positions in hive_side.dance_detector.get_dance_positions():
+                    for idx, ((x, y), o) in enumerate(dance_positions):
+                        xy, _ = hive_side.comb_mapper.map_to_comb(
+                            x, y, find_sensor=False
+                        )
+                        char = "." if idx < len(dance_positions) - 1 else "o"
+                        if self.draw_arrows and o is not None:
+                            o = o / np.pi * 180
+                            o = (o + 360) % 360
+                            char = arrows[int(round(o / 45, 0))]
+                        draw_at_comb_position(
+                            xy, char=char, color=side_colors[side_index]
+                        )
 
-            for (x, y) in self.comb_mapper.get_sensor_coordinates():
+            for (x, y) in self.cameras[0].comb_mapper.get_sensor_coordinates():
                 draw_at_comb_position(
                     np.array([x, y]),
                     char="X",

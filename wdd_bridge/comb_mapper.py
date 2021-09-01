@@ -1,14 +1,10 @@
 import cv2
-import json
 import math
 import numpy as np
 
 
 class CombMapper:
-    def __init__(self, config_path):
-
-        with open(config_path, "r") as f:
-            config = json.load(f)
+    def __init__(self, config):
 
         self.actuators = []
         for conf in config["actuators"]:

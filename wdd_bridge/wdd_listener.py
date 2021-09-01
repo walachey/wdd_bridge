@@ -2,6 +2,7 @@ import datetime
 import multiprocessing.connection
 import queue
 import threading
+import time
 
 from .dance_detector import Waggle
 
@@ -17,14 +18,19 @@ class WDDListener:
         self.log_fn = log_fn
 
         self.incoming_queue = queue.Queue()
+        self.connections = []  # Note that access to lists is generally thread-safe.
+
+        self.running = True
 
         self.listener_thread = threading.Thread(target=self.run_listener, args=())
         self.listener_thread.daemon = True
         self.listener_thread.start()
 
-    def run_listener(self):
+        self.receiving_thread = threading.Thread(target=self.run_receivers, args=())
+        self.receiving_thread.daemon = True
+        self.receiving_thread.start()
 
-        self.running = True
+    def run_listener(self):
 
         while self.running:
             self.print_fn("WDD: Waiting for connection...")
@@ -35,17 +41,27 @@ class WDDListener:
                         self.listener.last_accepted
                     )
                 )
+                self.connections.append(con)
             except Exception as e:
                 self.print_fn("WDD: Error accepting new connection:")
                 self.print_fn("WDD: " + str(e))
                 continue
 
-            while True:
+    def run_listener(self):
+
+        while self.running:
+            for i in range(len(self.connections)):
+                con = self.connections[i]
+                if not con.poll():
+                    continue
+
                 message = con.recv()
                 if message == "close":
-                    self.print_fn("WDD: Closing connection on request.")
+                    self.print_fn("WDD: Closing connection {} on request.".format(i))
                     con.close()
+                    del self.connections[i]
                     break
+
                 if "timestamp_waggle" in message:
                     angle = None
                     if "waggle_angle" in message:
@@ -54,14 +70,17 @@ class WDDListener:
                         message["x"], message["y"], angle, message["timestamp_waggle"]
                     )
                     self.print_fn(
-                        "WDD: received waggle detected {}s ago".format(
+                        "WDD: received waggle detected {}s ago (on connection {})".format(
                             (
                                 datetime.datetime.utcnow()
                                 - message["system_timestamp_waggle"]
-                            ).total_seconds()
+                            ).total_seconds(),
+                            i,
                         )
                     )
                     self.incoming_queue.put(waggle)
+            else:  # If no connections are there yet.
+                time.sleep(1.0)
 
     def close(self):
         self.running = False
