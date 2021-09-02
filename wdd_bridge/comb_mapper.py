@@ -4,7 +4,7 @@ import numpy as np
 
 
 class CombMapper:
-    def __init__(self, config):
+    def __init__(self, config, azimuth_updater):
 
         self.actuators = []
         for conf in config["actuators"]:
@@ -16,6 +16,8 @@ class CombMapper:
         self.homography, _ = cv2.findHomography(
             self.pixel_coordinates, self.unit_coordinates
         )
+
+        self.azimuth_updater = azimuth_updater
 
     def get_actuator_count(self):
         return len(self.actuators)
@@ -31,15 +33,22 @@ class CombMapper:
     def get_sensor_coordinates(self):
         return self.actuators
 
-    def map_to_comb(self, x, y, find_sensor=True):
+    def map_to_comb(self, x, y, waggle_angle, find_sensor=True):
 
+        xy = np.array([[x, y],[x + np.cos(waggle_angle), y + np.sin(waggle_angle)]]).reshape(2, 1, 2)
         xy = cv2.perspectiveTransform(
-            np.array([x, y]).reshape(1, 1, 2), self.homography
+            xy, self.homography
         )
+
+        # Rotate angle, accounting for homography.
+        waggle_angle = xy[1] - xy[0]
+        waggle_angle = np.arctan2(*list(waggle_angle.flatten()))
+        world_angle = self.azimuth_updater.get_azimuth() + waggle_angle
+
         xy = xy.flatten()
 
         if not find_sensor:
-            return xy, None
+            return xy, (waggle_angle, world_angle), None
 
         min_distance = np.inf
         sensor_index = None
@@ -49,4 +58,4 @@ class CombMapper:
                 min_distance = distance
                 sensor_index = idx
 
-        return xy, (sensor_index, min_distance)
+        return xy, (waggle_angle, world_angle), (sensor_index, min_distance)

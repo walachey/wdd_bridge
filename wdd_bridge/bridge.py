@@ -3,6 +3,7 @@ from .dance_detector import DanceDetector
 from .comb_connector import CombConnector, CombTriggerActuatorMessage
 from .comb_mapper import CombMapper
 from .statistics import Statistics
+from .azimuth import AzimuthUpdater
 
 import asciimatics
 import asciimatics.screen
@@ -14,13 +15,13 @@ import numpy as np
 class HiveSide:
     """In case a single frame is recorded from both sides, they need separate dance clustering and homography mappings."""
 
-    def __init__(self, cam_id, log_fn, print_fn, comb_config):
+    def __init__(self, cam_id, log_fn, print_fn, comb_config, azimuth_updater):
         self.cam_id = cam_id
         self.log_fn = log_fn
         self.print_fn = print_fn
 
         self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn)
-        self.comb_mapper = CombMapper(config=comb_config)
+        self.comb_mapper = CombMapper(config=comb_config, azimuth_updater=azimuth_updater)
 
     def close(self):
         pass
@@ -28,10 +29,12 @@ class HiveSide:
     def process(self, waggle_info):
         coordinates = self.dance_detector.process(waggle_info)
 
-        for (x, y) in coordinates:
-            self.print_fn("Activating vibration (triggered from cam ID '{}')".format(self.cam_id))
+        for (x, y, waggle_angle) in coordinates:
+            
+            xy, (waggle_angle, world_angle), (idx, distance) = self.comb_mapper.map_to_comb(x, y, waggle_angle)
 
-            xy, (idx, distance) = self.comb_mapper.map_to_comb(x, y)
+            self.print_fn("Activating vibration (cam '{}', hive angle {:1.1f}°, world angle {:1.1f}° )".format(
+                self.cam_id, waggle_angle, world_angle))
 
             yield CombTriggerActuatorMessage(idx, signal_index=1, side=1)
 
@@ -69,6 +72,11 @@ class Bridge:
 
         with open(comb_config, "r") as f:
             config = json.load(f)
+        
+        self.azimuth_updater = AzimuthUpdater(
+                latitude=config["latitude"],
+                longitude=config["longitude"]
+                )
 
         self.cameras = dict()
         for camera_config in config["cameras"]:
@@ -77,6 +85,7 @@ class Bridge:
                 log_fn=self.log_fn,
                 print_fn=self.print_fn,
                 comb_config=camera_config,
+                azimuth_updater=self.azimuth_updater
             )
         print("Loaded configs for {} cameras.".format(len(self.cameras)))
 
