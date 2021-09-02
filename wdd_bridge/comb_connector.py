@@ -65,7 +65,13 @@ class Actuator:
 
 
 class CombConnector:
+
     def __init__(self, port, actuator_count, print_fn, log_fn, character_delay=0.001):
+
+        self.audio_file = None
+        if port.endswith(".wav"):
+            self.audio_file = port
+            port = ""
 
         self.actuators = [Actuator() for i in range(actuator_count)]
         self.character_delay = character_delay
@@ -87,7 +93,11 @@ class CombConnector:
 
         self.output_queue = queue.Queue()
 
-        self.listener_thread = threading.Thread(target=self.run_connector, args=())
+        run_fn = self.run_connector
+        if self.audio_file is not None:
+            run_fn = self.run_local_audio_mode
+
+        self.listener_thread = threading.Thread(target=run_fn, args=())
         self.listener_thread.daemon = True
         self.listener_thread.start()
 
@@ -99,6 +109,26 @@ class CombConnector:
 
         self.output_queue.put(None)
         self.listener_thread.join()
+
+    def run_local_audio_mode(self):
+        
+        import simpleaudio
+
+        audio = simpleaudio.WaveObject.from_wave_file(self.audio_file)
+
+        self.running = True
+
+        self.print_fn("Comb: Running in audio-only mode...")
+
+        while self.running:
+
+            message = self.output_queue.get()
+            if message is None or not self.running:
+                break
+
+            self.print_fn(str(message))
+
+            audio.play()
 
     def run_connector(self):
 
@@ -155,7 +185,7 @@ class CombConnector:
                 self.print_fn("Skipping actuator deactivation.")
                 return
 
-        message = (message.upper() + "\r\n").encode("utf-8")
+        message = (str(message).upper() + "\r\n").encode("utf-8")
 
         self.log_fn(
             "serial message", text=message, character_delay=self.character_delay

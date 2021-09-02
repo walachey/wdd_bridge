@@ -4,3 +4,5 @@ multiprocessing_generator
 iso8601
 asciimatics
 pyserial
+pysound
+pygobject
