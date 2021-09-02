@@ -33,8 +33,17 @@ class HiveSide:
             
             xy, (waggle_angle, world_angle), (idx, distance) = self.comb_mapper.map_to_comb(x, y, waggle_angle)
 
-            self.print_fn("Activating vibration (cam '{}', hive angle {:1.1f}°, world angle {:1.1f}° )".format(
-                self.cam_id, waggle_angle, world_angle))
+            world_directions = [
+                            "E", "NEE", "NE", "NNE",
+                            "N", "NNW", "NW", "NWW",
+                            "W", "SWW", "SW", "SSW",
+                            "S", "SSE", "SE", "SEE"
+                            ]
+            angle = (2.0 * np.pi + world_angle) % (2.0 * np.pi)
+            world_direction = world_directions[int((angle / np.pi * 180.0) / (360.0 / len(world_directions)))]
+
+            self.print_fn("Vibrating for {} ({:1.1f}°) (cam '{}', hive angle {:1.1f}°)".format(
+                world_direction, world_angle / np.pi * 180.0, self.cam_id, waggle_angle / np.pi * 180.0))
 
             yield CombTriggerActuatorMessage(idx, signal_index=1, side=1)
 
