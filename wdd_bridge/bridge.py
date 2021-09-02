@@ -20,7 +20,7 @@ class HiveSide:
         self.print_fn = print_fn
 
         self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn)
-        self.comb_mapper = CombMapper(config_path=comb_config)
+        self.comb_mapper = CombMapper(config=comb_config)
 
     def close(self):
         pass
@@ -29,7 +29,7 @@ class HiveSide:
         coordinates = self.dance_detector.process(waggle_info)
 
         for (x, y) in coordinates:
-            self.print_fn("Activating vibration")
+            self.print_fn("Activating vibration (triggered from cam ID '{}')".format(self.cam_id))
 
             xy, (idx, distance) = self.comb_mapper.map_to_comb(x, y)
 
@@ -88,7 +88,7 @@ class Bridge:
         print("Initializing serial connection..", flush=True)
         self.comb = CombConnector(
             port=comb_port,
-            actuator_count=self.comb_mapper.get_actuator_count(),
+            actuator_count=next(iter(self.cameras.values())).comb_mapper.get_actuator_count(),
             print_fn=print_fn,
             log_fn=self.log_fn,
         )
@@ -101,7 +101,7 @@ class Bridge:
             self.running = False
             self.wdd.close()
             self.comb.close()
-            for cam in self.cameras:
+            for cam in self.cameras.values():
                 cam.close()
 
             if self.statistics is not None:
@@ -125,7 +125,7 @@ class Bridge:
 
                 if not waggle_info:
                     continue
-                waggle_cam_id = waggle_info["cam_id"]
+                waggle_cam_id = waggle_info.cam_id
                 if waggle_cam_id not in self.cameras:
                     self.print_fn("Received waggle for invalid camera ID.")
                 messages = self.cameras[waggle_cam_id].process(waggle_info)
@@ -138,6 +138,9 @@ class Bridge:
 
     def run_ui(self):
         def ui(screen):
+            
+            # Use the general information from any one side/camera (e.g. number of sensors).
+            any_side = next(iter(self.cameras.values()))
 
             screen.clear_buffer(7, 2, 0)
 
@@ -149,7 +152,7 @@ class Bridge:
 
             # Draw outline.
 
-            hx0, hy0, hx1, hy1 = self.comb_mapper.get_comb_rectangle()
+            hx0, hy0, hx1, hy1 = any_side.comb_mapper.get_comb_rectangle()
             hwidth, hheight = hx1 - hx0, hy1 - hy0
 
             cleft, cright = int(screen.width * 0.1), int(screen.width * 0.9)
@@ -181,7 +184,7 @@ class Bridge:
                 asciimatics.screen.Screen.COLOUR_YELLOW,
                 asciimatics.screen.Screen.COLOUR_CYAN,
             ]
-            for side_index, hive_side in enumerate(self.cameras):
+            for side_index, hive_side in enumerate(self.cameras.values()):
                 for dance_positions in hive_side.dance_detector.get_dance_positions():
                     for idx, ((x, y), o) in enumerate(dance_positions):
                         xy, _ = hive_side.comb_mapper.map_to_comb(
@@ -196,7 +199,7 @@ class Bridge:
                             xy, char=char, color=side_colors[side_index]
                         )
 
-            for (x, y) in self.cameras[0].comb_mapper.get_sensor_coordinates():
+            for (x, y) in any_side.comb_mapper.get_sensor_coordinates():
                 draw_at_comb_position(
                     np.array([x, y]),
                     char="X",

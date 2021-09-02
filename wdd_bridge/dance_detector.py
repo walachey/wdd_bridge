@@ -2,11 +2,12 @@ import math
 
 
 class Waggle:
-    def __init__(self, x, y, angle, timestamp):
+    def __init__(self, x, y, angle, timestamp, cam_id):
         self.x = x
         self.y = y
         self.angle = angle
         self.timestamp = timestamp
+        self.cam_id = cam_id
 
 
 class Dance:

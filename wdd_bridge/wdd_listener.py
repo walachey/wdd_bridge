@@ -37,8 +37,8 @@ class WDDListener:
             try:
                 con = self.listener.accept()
                 self.print_fn(
-                    "WDD: Accepted connection from {}".format(
-                        self.listener.last_accepted
+                    "WDD: Accepted connection {} from {}".format(
+                        len(self.connections), self.listener.last_accepted
                     )
                 )
                 self.connections.append(con)
@@ -47,7 +47,7 @@ class WDDListener:
                 self.print_fn("WDD: " + str(e))
                 continue
 
-    def run_listener(self):
+    def run_receivers(self):
 
         while self.running:
             for i in range(len(self.connections)):
@@ -64,18 +64,19 @@ class WDDListener:
 
                 if "timestamp_waggle" in message:
                     angle = None
+                    cam_id = message["cam_id"]
                     if "waggle_angle" in message:
                         angle = message["waggle_angle"]
                     waggle = Waggle(
-                        message["x"], message["y"], angle, message["timestamp_waggle"]
+                        message["x"], message["y"], angle, message["timestamp_waggle"], cam_id
                     )
                     self.print_fn(
-                        "WDD: received waggle detected {}s ago (on connection {})".format(
+                        "WDD: received waggle detected {}s ago (on connection {}, cam id: '{}')".format(
                             (
                                 datetime.datetime.utcnow()
                                 - message["system_timestamp_waggle"]
                             ).total_seconds(),
-                            i,
+                            i, cam_id
                         )
                     )
                     self.incoming_queue.put(waggle)
