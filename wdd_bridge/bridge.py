@@ -2,6 +2,7 @@ from .wdd_listener import WDDListener
 from .dance_detector import DanceDetector
 from .comb_connector import CombConnector, CombTriggerActuatorMessage
 from .comb_mapper import CombMapper
+from .experimental_control import ExperimentalControl
 from .statistics import Statistics
 from .azimuth import AzimuthUpdater
 
@@ -45,7 +46,7 @@ class HiveSide:
             self.print_fn("Vibrating for {} ({:1.1f}°) (cam '{}', hive angle {:1.1f}°)".format(
                 world_direction, world_angle / np.pi * 180.0, self.cam_id, waggle_angle / np.pi * 180.0))
 
-            yield CombTriggerActuatorMessage(idx, signal_index=1, side=1)
+            yield world_angle, CombTriggerActuatorMessage(idx, signal_index=1, side=1)
 
 
 class Bridge:
@@ -82,6 +83,11 @@ class Bridge:
         with open(comb_config, "r") as f:
             config = json.load(f)
         
+        if "experiment" in config:
+            self.experimental_control = ExperimentalControl(config["experiment"])
+        else:
+            self.experimental_control = None
+
         self.azimuth_updater = AzimuthUpdater(
                 latitude=config["latitude"],
                 longitude=config["longitude"]
@@ -146,10 +152,16 @@ class Bridge:
                 waggle_cam_id = waggle_info.cam_id
                 if waggle_cam_id not in self.cameras:
                     self.print_fn("Received waggle for invalid camera ID.")
+
                 messages = self.cameras[waggle_cam_id].process(waggle_info)
 
-                for message in messages:
-                    self.comb.send_message(message)
+                for world_angle, message in messages:
+                    
+                    if self.experimental_control is not None:
+                        message = self.experimental_control.filter_message(message, world_angle)
+                    
+                    if message is not None:
+                        self.comb.send_message(message)
 
         finally:
             self.stop()
