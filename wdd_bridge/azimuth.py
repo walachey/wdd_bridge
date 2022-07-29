@@ -1,5 +1,6 @@
 import astropy
 import datetime
+import numpy as np
 import pytz
 import queue
 import threading
@@ -36,7 +37,7 @@ class AzimuthUpdater:
     
         current_time = astropy.time.Time(current_time.astimezone(pytz.UTC), scale="utc")
         sun_loc = astropy.coordinates.get_sun(current_time)
-        azimuth_rad = sun_loc.transform_to(astropy.coordinates.AltAz(obstime=time, location=earth_loc)).az
+        azimuth_rad = sun_loc.transform_to(astropy.coordinates.AltAz(obstime=current_time, location=earth_loc)).az.rad
 
         # azimuth_rad is now at N0, E90
 

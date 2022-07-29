@@ -49,8 +49,10 @@ class Statistics:
             for k, v in data.items():
                 if isinstance(v, datetime.datetime) or isinstance(v, datetime.date):
                     data[k] = v.isoformat()
-
-            buffer = json.dumps(data)
+            try:
+                buffer = json.dumps(data)
+            except Exception as e:
+                buffer = json.dumps({"text": "serilization_error", "what": str(e), "payload": str(data)})
 
             filename = self.filename
             if "<date>" in filename:

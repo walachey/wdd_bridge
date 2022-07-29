@@ -1,5 +1,6 @@
 import datetime
 import multiprocessing.connection
+import pytz
 import queue
 import threading
 import time
@@ -49,12 +50,17 @@ class WDDListener:
 
     def run_receivers(self):
 
+        def is_datetime_timezone_aware(dt):
+            return dt.tzinfo is not None and dt.tzinfo.utcoffset(dt) is not None
+
         while self.running:
+            has_active_connection = False
             for i in range(len(self.connections)):
                 con = self.connections[i]
                 if not con.poll():
                     continue
 
+                has_active_connection = True
                 message = con.recv()
                 if message == "close":
                     self.print_fn("WDD: Closing connection {} on request.".format(i))
@@ -64,23 +70,36 @@ class WDDListener:
 
                 if "timestamp_waggle" in message:
                     angle = None
+                    duration = None
                     cam_id = message["cam_id"]
                     if "waggle_angle" in message:
                         angle = message["waggle_angle"]
+                        duration = message["waggle_duration"]
+                    waggle_timestamp = message["timestamp_waggle"]
+                    
+                    if not is_datetime_timezone_aware(waggle_timestamp):
+                        waggle_timestamp = pytz.UTC.localize(waggle_timestamp)
+                    else:
+                        assert int(waggle_timestamp.utcoffset().total_seconds()) == 0
+                        
                     waggle = Waggle(
-                        message["x"], message["y"], angle, message["timestamp_waggle"], cam_id
+                        message["x"], message["y"], angle, duration, waggle_timestamp, cam_id, uuid=message["waggle_id"]
                     )
                     self.print_fn(
-                        "WDD: received waggle detected {}s ago (on connection {}, cam id: '{}')".format(
+                        "WDD: received waggle detected {:4.3f}s ago (cam: '{}', con. {})".format(
                             (
                                 datetime.datetime.utcnow()
                                 - message["system_timestamp_waggle"]
                             ).total_seconds(),
-                            i, cam_id
-                        )
+                            cam_id, i
+                        ),
+                        cam_id=cam_id, waggle_timestamp=waggle.timestamp, waggle_angle=angle, waggle_id=waggle.uuid
                     )
                     self.incoming_queue.put(waggle)
-            else:  # If no connections are there yet.
+                else:
+                    self.print_fn("WDD: received invalid message ({}).".format(str(message)))
+            
+            if not has_active_connection:
                 time.sleep(1.0)
 
     def close(self):

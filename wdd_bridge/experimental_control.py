@@ -6,9 +6,10 @@ import pytz
 
 class ExperimentalControl:
 
-    def __init__(self, config, print_fn):
+    def __init__(self, config, print_fn, log_fn):
         
         self.print_fn = print_fn
+        self.log_fn = log_fn
         
         self.tolerance_deg = config["tolerance_deg"]
         self.tolerance_rad = self.tolerance_deg / 180.0 * np.pi
@@ -28,15 +29,25 @@ class ExperimentalControl:
             ))
 
         self.timetable = pandas.DataFrame(timetable)
-        self.timetable.angle_rad = (self.timetable.angle_rad.values + 2.0 * np.pi) % (2.0 * np.pi)
+        valid_angles = ~pandas.isnull(self.timetable.angle_rad.values)
+        self.timetable.angle_rad[valid_angles] = (self.timetable.angle_rad[valid_angles].values + 2.0 * np.pi) % (2.0 * np.pi)
+
+        today = datetime.datetime.now().astimezone(pytz.UTC).date()
+        today_start = pytz.UTC.localize(datetime.datetime.combine(today, datetime.time(0)))
+        today_end = today_start + datetime.timedelta(days=1)
+        today_rules = self.timetable[(
+            (self.timetable.ts_from >= today_start) & (self.timetable.ts_from < today_end)
+            | (self.timetable.ts_to >= today_start) & (self.timetable.ts_to < today_end)
+            | (self.timetable.ts_from < today_start) & (self.timetable.ts_to >= today_end))]
+        self.print_fn("Loaded {} experiment rules ({} valid today).".format(self.timetable.shape[0], today_rules.shape[0]))
 
     def filter_message(self, message, world_angle):
 
         now = datetime.datetime.now().astimezone(pytz.UTC)
         world_angle = (world_angle + 2.0 * np.pi) % (2.0 * np.pi)
 
-        current_ruleset = self.timetable[(self.timetable.ts_from.values <= now) & (self.timetable.ts_to >= now)]
-        if current_ruleset.empty():
+        current_ruleset = self.timetable[(self.timetable.ts_from <= now) & (self.timetable.ts_to >= now)]
+        if current_ruleset.empty:
             self.print_fn("No rule set for current time.")
             return message
 
@@ -55,12 +66,14 @@ class ExperimentalControl:
             if should_allow_message and should_prevent_message:
                 self.print_fn("Warning: Two concrete, opposing rules for this world angle.")
             if should_prevent_message:
+                self.log_fn("prevented vibration")
                 return True, None
             elif should_allow_message:
+                self.log_fn("allowed vibration")
                 return True, message
             return False, message
 
-        if not concrete_rules.empty():
+        if not concrete_rules.empty:
             
             handled, message = handle_action_set(concrete_rules.rule.values)
             if handled:
@@ -68,7 +81,7 @@ class ExperimentalControl:
 
         # Any general rules?
         general_rules = current_ruleset[~concrete_indices]
-        if not general_rules.empty():
+        if not general_rules.empty:
             handled, message = handle_action_set(general_rules.rule.values)
             if handled:
                 return message

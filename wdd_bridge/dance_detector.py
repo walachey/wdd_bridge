@@ -1,15 +1,18 @@
 import math
 import numpy as np
+import pandas
 import scipy.stats
 
 def calculate_angle_consensus(all_angles, inlier_cutoff=np.pi/4.0, verbose=False):
     """Takes angles in radians. Performs RANSAC and returns consensus angle.
     """
     
+    all_angles = np.array(all_angles)
+
     # Special cases.
-    if all_angles.shape[0] < 3:
+    if all_angles.shape[0] < 2:
         # No use performing any consensus on a small set.
-        return all_angles[0]
+        return all_angles[0], 1
     
     # Normalize angles to be [0, 2 * np.pi]
     all_angles = (all_angles + 2.0 * np.pi) % (2.0 * np.pi)
@@ -40,7 +43,7 @@ def calculate_angle_consensus(all_angles, inlier_cutoff=np.pi/4.0, verbose=False
     if max_inliers == 0:
         if verbose:
             print("Could not find consensus at all.")
-        return all_angles[0]
+        return all_angles[0], 1
     
     consensus_angle = scipy.stats.circmean(all_angles[inlier_indices])
     if verbose:
@@ -50,15 +53,17 @@ def calculate_angle_consensus(all_angles, inlier_cutoff=np.pi/4.0, verbose=False
             max_inlier_consensus_angle / np.pi * 180.0,
             list(all_angles[inlier_indices] / np.pi * 180.0)))
         
-    return consensus_angle
+    return consensus_angle, max_inliers
 
 class Waggle:
-    def __init__(self, x, y, angle, timestamp, cam_id):
+    def __init__(self, x, y, angle, duration, timestamp, cam_id, uuid):
         self.x = x
         self.y = y
         self.angle = angle
+        self.duration = duration
         self.timestamp = timestamp
         self.cam_id = cam_id
+        self.uuid = uuid
 
 
 class Dance:
@@ -66,8 +71,13 @@ class Dance:
 
         self.coords = []
         self.angles = []
+        self.durations = []
         self.timestamps = []
         self.triggered = 0
+        self.waggle_ids = []
+
+        self._dance_angle = None
+        self._n_inliers = None
 
     def get_first_timestamp(self):
         return self.timestamps[0]
@@ -86,9 +96,13 @@ class Dance:
         return min_distance
 
     def append(self, waggle):
+        self._dance_angle, self._n_inliers = None, None
+
         self.coords.append((waggle.x, waggle.y))
         self.angles.append(waggle.angle)
+        self.durations.append(waggle.duration)
         self.timestamps.append(waggle.timestamp)
+        self.waggle_ids.append(waggle.uuid)
 
     def trigger(self):
         self.triggered += 1
@@ -96,8 +110,24 @@ class Dance:
     def __len__(self):
         return len(self.timestamps)
 
+    def _ensure_dance_angle(self):
+        if self._dance_angle is None:
+            self._dance_angle, self._n_inliers = calculate_angle_consensus(self.angles)
+
     def get_dance_angle(self):
-        return calculate_angle_consensus(self.angles)
+        self._ensure_dance_angle()
+        return self._dance_angle
+
+    def get_dance_angle_inliers(self):
+        self._ensure_dance_angle()
+        return self._n_inliers
+
+    def get_waggle_duration(self):
+        durations = np.array(self.durations)
+        durations = durations[~pandas.isnull(durations)]
+        if durations.shape[0] == 0:
+            return np.nan
+        return np.median(durations)
 
 class DanceDetector:
     def __init__(
@@ -140,19 +170,27 @@ class DanceDetector:
                 continue
 
             dance.append(waggle)
-            if len(dance) >= self.min_waggles:
-                dance.trigger()
+            if len(dance) >= 2:
                 dance_angle = dance.get_dance_angle()
-                yield (waggle.x, waggle.y, dance_angle)
+                dance_duration = dance.get_waggle_duration()
+                n_inliers = dance.get_dance_angle_inliers()
 
-                self.log_fn(
-                    "detected dance",
-                    first_waggle=dance.get_first_timestamp(),
-                    last_timestamp=dance.get_last_timestamp(),
-                    dance_angle=dance_angle,
-                    cam_id=waggle.cam_id,
-                    waggle_index=len(dance)
-                )
+                if n_inliers >= self.min_waggles:
+                    dance.trigger()
+
+                    self.log_fn(
+                        "detected dance",
+                        first_waggle=dance.get_first_timestamp(),
+                        last_timestamp=dance.get_last_timestamp(),
+                        dance_angle=float(dance_angle), dance_angle_inliers=int(n_inliers),
+                        waggle_duration=float(dance_duration),
+                        cam_id=waggle.cam_id,
+                        waggle_index=len(dance),
+                        waggle_ids=dance.waggle_ids
+                    )
+
+                    yield (waggle.x, waggle.y, dance_angle, dance_duration)
+
 
             added = True
             break

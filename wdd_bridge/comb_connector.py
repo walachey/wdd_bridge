@@ -115,6 +115,7 @@ class CombConnector:
         import simpleaudio
 
         audio = simpleaudio.WaveObject.from_wave_file(self.audio_file)
+        audio_replay = None
 
         self.running = True
 
@@ -125,10 +126,18 @@ class CombConnector:
             message = self.output_queue.get()
             if message is None or not self.running:
                 break
+            
+            is_still_playing = (audio_replay is not None) and (audio_replay.is_playing())
+            action = "playing_sound"
+            if is_still_playing:
+                action = "continuing_last_sound"
+            
+            self.print_fn("{} - {}".format(str(message), action))
+            self.log_fn(action, file=self.audio_file)
 
-            self.print_fn(str(message))
+            if not is_still_playing:
+                audio_replay = audio.play()
 
-            audio.play()
 
     def run_connector(self):
 
