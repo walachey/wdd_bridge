@@ -29,8 +29,8 @@ class ExperimentalControl:
             ))
 
         self.timetable = pandas.DataFrame(timetable)
-        valid_angles = ~pandas.isnull(self.timetable.angle_rad.values)
-        self.timetable.angle_rad[valid_angles] = (self.timetable.angle_rad[valid_angles].values + 2.0 * np.pi) % (2.0 * np.pi)
+        valid_angles = ~pandas.isnull(self.timetable.angle_rad)
+        self.timetable.loc[valid_angles, "angle_rad"] = (self.timetable.loc[valid_angles, "angle_rad"].values + 2.0 * np.pi) % (2.0 * np.pi)
 
         today = datetime.datetime.now().astimezone(pytz.UTC).date()
         today_start = pytz.UTC.localize(datetime.datetime.combine(today, datetime.time(0)))
