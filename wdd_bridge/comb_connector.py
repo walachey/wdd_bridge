@@ -12,6 +12,16 @@ class CombActuatorMessage:
     def is_deactivation_message(self):
         return False
 
+class SetLEDsMessage(CombActuatorMessage):
+
+    def __init__(self, config):
+        if config < 0 or config > 7:
+            raise ValueError("LED config must be in range 0-7 (got {}).".format(config))
+
+        self.config = config
+    
+    def __str__(self):
+        return "LEDS {}".format(self.config)
 
 class CombTriggerActuatorMessage(CombActuatorMessage):
     # The default constructor deactivates the signal for the given actuator.
@@ -100,6 +110,20 @@ class CombConnector:
         self.listener_thread = threading.Thread(target=run_fn, args=())
         self.listener_thread.daemon = True
         self.listener_thread.start()
+
+        if not self.dummy_mode:
+            # Can be unjoinable.
+            led_flashing_thread = threading.Thread(target=self.flash_leds, args=())
+            led_flashing_thread.daemon = True
+            led_flashing_thread.start()
+
+    def flash_leds(self):
+        time.sleep(0.5)
+        for i in range(0, 3):
+            self.send_message(SetLEDsMessage((1 << i)))
+            time.sleep(0.5)
+            self.send_message(SetLEDsMessage(0))
+            time.sleep(0.5)
 
     def close(self):
         self.running = False
@@ -197,15 +221,17 @@ class CombConnector:
                 self.print_fn("Skipping actuator deactivation.")
                 return
 
-        message = (str(message).upper() + "\r\n").encode("utf-8")
+        message = str(message).upper()
 
         self.log_fn(
             "serial message", text=message, character_delay=self.character_delay
         )
 
+        message = message + "\n\r"
+
         if not self.character_delay:
             self.con.write(message)
         else:
             for char in message:
-                self.con.write(char)
+                self.con.write(char.encode("utf-8"))
                 time.sleep(self.character_delay)
