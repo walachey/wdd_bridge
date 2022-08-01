@@ -185,7 +185,7 @@ class CombConnector:
             scheduling_thread = threading.Thread(
                 target=schedule_deactivation,
                 args=(delay, deactivation_message),
-                kwargs=(),
+                kwargs=dict(),
             )
             scheduling_thread.start()
         elif message.is_deactivation_message():
