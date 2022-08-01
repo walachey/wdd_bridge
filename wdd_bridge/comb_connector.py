@@ -136,7 +136,10 @@ class CombConnector:
             self.log_fn(action, file=self.audio_file)
 
             if not is_still_playing:
-                audio_replay = audio.play()
+                try:
+                    audio_replay = audio.play()
+                except Exception as e:
+                    self.print_fn("Error when playing sound! {}".format(str(type(e)), str(e)))
 
 
     def run_connector(self):
