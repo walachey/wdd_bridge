@@ -59,12 +59,13 @@ class HiveSide:
 
 class Bridge:
     def __init__(
-        self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file
+        self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file, no_gui=False
     ):
         self.wdd_port = wdd_port
         self.wdd_authkey = wdd_authkey
         self.comb_port = comb_port
         self.draw_arrows = draw_arrows
+        self.no_gui = no_gui
 
         # Advanced logging.
         if stats_file:
@@ -131,6 +132,10 @@ class Bridge:
         if self.running:
             self.log_fn("stopping execution")
             self.running = False
+
+            if self.screen is not None:
+                self.screen.close()
+
             self.wdd.close()
             self.comb.close()
             for cam in self.cameras.values():
@@ -139,15 +144,16 @@ class Bridge:
             if self.statistics is not None:
                 self.statistics.close()
 
-            if self.screen is not None:
-                self.screen.close()
 
     def run(self):
 
         self.log_fn("starting execution")
         try:
             while self.running:
-                self.run_ui()
+                
+                if not self.no_gui:
+                    self.run_ui()
+
                 # Poll with a timeout, so we can e.g. interrupt the process.
                 waggle_info = self.wdd.get_message(block=True, timeout=1.0)
 

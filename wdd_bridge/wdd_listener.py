@@ -110,7 +110,7 @@ class WDDListener:
             l.close()
         self.incoming_queue.put(None)
         # Don't join the listener thread here because it might be hanging on trying to get a connection.
-        self.listener_thread.join()
+        self.receiving_thread.join()
 
     def get_message(self, block=True, timeout=None):
 

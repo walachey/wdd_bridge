@@ -27,6 +27,10 @@ import click
     "--stats-file",
     help="Filename to log advanced statistics to. Each line is a json object.",
 )
+@click.option(
+    "--no-gui",
+    help="Do not present a graphical user interface. Might be useful for debugging purposes.",
+)
 def main(**kwargs):
 
     print("Initializing bridge..", flush=True)
