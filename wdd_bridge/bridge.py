@@ -210,10 +210,18 @@ class Bridge:
             hx0, hy0, hx1, hy1 = any_side.comb_mapper.get_comb_rectangle()
             hwidth, hheight = hx1 - hx0, hy1 - hy0
 
-            cleft, cright = int(screen.width * 0.1), int(screen.width * 0.9)
-            cwidth = cright - cleft
-            ctop, cbottom = min(5, cleft), int(cwidth * (hheight / hwidth))
-            cheight = cbottom - ctop
+            # Make sure we have enough space for the logs below the screen.
+            log_margin_lines = 10
+
+            # Usually, fonts are higher than wide. Account a bit for that.
+            for font_width_factor in (1.5, 1.25, 1.0):
+                ctop, cbottom = 3, int(screen.height - log_margin_lines)
+                cheight = cbottom - ctop
+                cwidth = int(font_width_factor * cheight * (hwidth / hheight))
+                if cwidth < screen.width:
+                    break
+
+            cleft, cright = int(0.5 * (screen.width - cwidth)), int(0.5 * (screen.width + cwidth))
 
             def draw_border(start, to):
                 screen.move(*start)
@@ -285,6 +293,10 @@ class Bridge:
                     )
 
             screen.refresh()
+
+        if self.screen is not None and self.screen.has_resized():
+            self.screen.close()
+            self.screen = None
 
         if self.screen is None:
             self.screen = asciimatics.screen.Screen.open()
