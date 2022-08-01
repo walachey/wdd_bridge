@@ -139,7 +139,7 @@ class CombConnector:
                 try:
                     audio_replay = audio.play()
                 except Exception as e:
-                    self.print_fn("Error when playing sound! {}".format(str(type(e)), str(e)))
+                    self.print_fn("Error when playing sound! {}: {}".format(type(e).__name__, str(e)))
 
 
     def run_connector(self):
