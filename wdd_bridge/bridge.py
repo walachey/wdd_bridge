@@ -28,11 +28,12 @@ def world_angle_to_direction_string(world_angle):
 class HiveSide:
     """In case a single frame is recorded from both sides, they need separate dance clustering and homography mappings."""
 
-    def __init__(self, cam_id, log_fn, print_fn, comb_config, azimuth_updater):
+    def __init__(self, cam_id, log_fn, print_fn, comb_config, azimuth_updater, suppression_signal_index):
         self.cam_id = cam_id
         self.log_fn = log_fn
         self.print_fn = print_fn
         self.azimuth_updater = azimuth_updater
+        self.suppression_signal_index = suppression_signal_index
 
         self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn)
         self.comb_mapper = CombMapper(config=comb_config, azimuth_updater=azimuth_updater, print_fn=self.print_fn)
@@ -54,12 +55,13 @@ class HiveSide:
                 world_direction, world_angle / np.pi * 180.0, waggle_duration, self.cam_id,
                 waggle_angle / np.pi * 180.0, waggle_angle_orig / np.pi * 180.0, self.azimuth_updater.get_azimuth() / np.pi * 180.0))
 
-            yield world_angle, CombTriggerActuatorMessage(idx, signal_index=1, side=1)
+            yield world_angle, CombTriggerActuatorMessage(idx, signal_index=self.suppression_signal_index, side=1)
 
 
 class Bridge:
     def __init__(
-        self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file, no_gui=False
+        self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file, no_gui=False,
+        sound_index=0
     ):
         self.wdd_port = wdd_port
         self.wdd_authkey = wdd_authkey
@@ -109,7 +111,8 @@ class Bridge:
                 log_fn=self.log_fn,
                 print_fn=self.print_fn,
                 comb_config=camera_config,
-                azimuth_updater=self.azimuth_updater
+                azimuth_updater=self.azimuth_updater,
+                suppression_signal_index=sound_index,
             )
         print("Loaded configs for {} cameras.".format(len(self.cameras)))
 

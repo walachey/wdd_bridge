@@ -31,6 +31,12 @@ import click
     "--no-gui",
     help="Do not present a graphical user interface. Might be useful for debugging purposes.",
 )
+@click.option(
+    "--sound-index",
+    help="Number of the sound file on the sound board to play on suppression (0-10).",
+    default=0,
+    type=click.IntRange(0, 11)
+)
 def main(**kwargs):
 
     print("Initializing bridge..", flush=True)
