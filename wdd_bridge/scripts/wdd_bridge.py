@@ -45,6 +45,7 @@ import click
 )
 @click.option(
     "--all-actuators",
+    is_flag=True,
     help="Play signal on all actuators simultaneously.",
 )
 @click.option(

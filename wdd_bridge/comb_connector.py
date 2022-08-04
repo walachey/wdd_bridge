@@ -31,7 +31,7 @@ class SetLEDsMessage(CombActuatorMessage):
 
 class ActuatorSignalSelectionMessage(CombActuatorMessage):
 
-    def __init__(self, actuator_index, signal_index=0):
+    def __init__(self, actuator_index, signal_index=0, duration=None):
 
         if not (actuator_index >= 0 and actuator_index <= 7):
             raise ValueError("Actuator index must be in range [0, 7], got {}.".format(actuator_index))
@@ -41,10 +41,19 @@ class ActuatorSignalSelectionMessage(CombActuatorMessage):
 
         self.actuator_index = actuator_index
         self.signal_index = signal_index
+        self.duration = duration
 
     def is_deactivation_message(self):
         return self.signal_index == 0
     
+    def is_activation_message(self):
+        return self.duration is not None and not self.is_deactivation_message()
+    
+    def get_deactivation_message(self):
+        if self.duration is None:
+            return None, None
+        return self.duration, ActuatorSignalSelectionMessage(self.actuator_index, signal_index=0)
+
     def get_actuator_index(self):
         return self.actuator_index
 
@@ -93,14 +102,19 @@ class TriggerMessage(CombActuatorMessage):
         # We are only working with one sound board now..
         return self.file_index0 == 11
 
+    def is_activation_message(self):
+        return self.duration is not None and not self.is_deactivation_message()
+
     def get_actuator_index(self):
         return None
 
     def get_deactivation_message(self):
+        if self.duration is None:
+            return None, None
         return self.duration, StopTriggerMessage()
 
     def get_serial_message(self):
-        return "trig {} {}".format(self.file_index0, self.file_index0)
+        return "trig {} {}".format(self.file_index0, self.file_index1)
 
     def __str__(self):
         return "TriggerMessage(file_index0={}, file_index1={}, duration={})".format(
@@ -216,7 +230,8 @@ class Actuator:
 
 class CombConnector:
 
-    def __init__(self, port, actuator_count, print_fn, log_fn, character_delay=0.001):
+    def __init__(self, port, actuator_count, print_fn, log_fn, character_delay=0.001,
+                all_actuators=False, signal_index=0, sound_index=0):
 
         self.audio_file = None
         if port.endswith(".wav"):
@@ -262,9 +277,17 @@ class CombConnector:
             led_flashing_thread.daemon = True
             led_flashing_thread.start()
 
-        # Start with all unlinked and stopped.
-        self.send_message(StopTriggerMessage())
-        self.send_message(DisableAllActuators())
+        if all_actuators:
+            # All actuators are always playing at the same time?
+            # Then, we link them to the correct signal here.
+            self.send_message(StopTriggerMessage())
+            self.send_message(LinkAllActuatorsToSignal(signal_index=signal_index))
+        else:
+            # Otherwise, we can unlink all actuators but already play the signal.
+            self.send_message(DisableAllActuators())
+            self.send_message(TriggerMessage(file_index0=sound_index, duration=None))
+
+
 
     def flash_leds(self):
         time.sleep(0.5)
@@ -362,23 +385,25 @@ class CombConnector:
                 actuator_label = "actuator {}".format(selected_actuator_index)
 
             return selected_actuators, actuator_label
+            
         if message.is_activation_message():
 
             delay, deactivation_message = message.get_deactivation_message()
 
-            selected_actuators, actuator_label = actuator_index_to_actuators(message.get_actuator_index())
+            if deactivation_message is not None:
+                selected_actuators, actuator_label = actuator_index_to_actuators(message.get_actuator_index())
 
-            for actuator in selected_actuators:
-                actuator.set_active_for(delay)
+                for actuator in selected_actuators:
+                    actuator.set_active_for(delay)
 
-            scheduling_thread = threading.Thread(
-                target=schedule_deactivation,
-                args=(delay, deactivation_message),
-                kwargs=dict(),
-            )
-            scheduling_thread.start()
+                scheduling_thread = threading.Thread(
+                    target=schedule_deactivation,
+                    args=(delay, deactivation_message),
+                    kwargs=dict(),
+                )
+                scheduling_thread.start()
 
-            self.print_fn("Triggering {} for {:3.2f} s".format(actuator_label, delay))
+                self.print_fn("Triggering {} for {:3.2f} s".format(actuator_label, delay))
 
         elif message.is_deactivation_message():
             # Only deactivate if no other message activated it in the meantime.

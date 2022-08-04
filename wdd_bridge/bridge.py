@@ -1,7 +1,7 @@
 from winsound import PlaySound
 from .wdd_listener import WDDListener
 from .dance_detector import DanceDetector
-from .comb_connector import CombConnector, PlaySoundfileOnActuator
+from .comb_connector import CombConnector, ActuatorSignalSelectionMessage, TriggerMessage
 from .comb_mapper import CombMapper
 from .experimental_control import ExperimentalControl
 from .statistics import Statistics
@@ -52,11 +52,10 @@ class HiveSide:
     def get_activation_message(self, actuator_index):
 
         if self.use_all_actuators:
-            actuator_index = None
+            return TriggerMessage(file_index0=self.suppression_soundfile_index, duration=self.suppression_signal_duration)
 
-        return PlaySoundfileOnActuator(
+        return ActuatorSignalSelectionMessage(
                 actuator_index=actuator_index,
-                file_index=self.suppression_soundfile_index,
                 signal_index=self.suppression_signal_index,
                 duration=self.suppression_signal_duration
         )
@@ -150,6 +149,9 @@ class Bridge:
             actuator_count=next(iter(self.cameras.values())).comb_mapper.get_actuator_count(),
             print_fn=print_fn,
             log_fn=self.log_fn,
+            all_actuators=all_actuators,
+            signal_index=signal_index,
+            sound_index=sound_index
         )
 
         self.screen = None
