@@ -319,7 +319,7 @@ class CombConnector:
 
             message = self.output_queue.get()
             if message is None or not self.running or not message.is_activation_message():
-                break
+                continue
             
             is_still_playing = (audio_replay is not None) and (audio_replay.is_playing())
             action = "playing_sound"
@@ -385,7 +385,7 @@ class CombConnector:
                 actuator_label = "actuator {}".format(selected_actuator_index)
 
             return selected_actuators, actuator_label
-            
+
         if message.is_activation_message():
 
             delay, deactivation_message = message.get_deactivation_message()

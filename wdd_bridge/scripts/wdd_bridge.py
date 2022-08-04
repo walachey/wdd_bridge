@@ -11,7 +11,7 @@ import click
     "--wdd-authkey", required=True, help="Passphrase to authenticate connections."
 )
 @click.option(
-    "--comb-port", default="/dev/ttyUSB0", help="Serial port to connect to the comb."
+    "--comb-port", default="/dev/ttyUSB0", help="Serial port to connect to the comb. Use local mode (i.e. just play sound) if the 'port' is a .wav file."
 )
 @click.option(
     "--comb-config",
