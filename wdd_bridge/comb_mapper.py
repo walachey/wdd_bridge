@@ -9,8 +9,10 @@ class CombMapper:
         self.print_fn = print_fn
         self.actuators = []
         for conf in config["actuators"]:
-            self.actuators.append((conf["x"], conf["y"]))
-
+            actuator_index = int(conf["name"][-1])
+            self.actuators.append((actuator_index, (conf["x"], conf["y"])))
+        self.actuators = [xy for (_, xy) in sorted(self.actuators)]
+        
         self.pixel_coordinates = np.array(config["homography"]["pixels"]).reshape(4, 2)
         self.unit_coordinates = np.array(config["homography"]["units"]).reshape(4, 2)
 
@@ -79,6 +81,7 @@ class CombMapper:
         if not find_sensor:
             return xy, (waggle_angle, world_angle), None
 
+        x, y = xy
         min_distance = np.inf
         sensor_index = None
         for idx, (ax, ay) in enumerate(self.actuators):

@@ -1,6 +1,7 @@
+from winsound import PlaySound
 from .wdd_listener import WDDListener
 from .dance_detector import DanceDetector
-from .comb_connector import CombConnector, CombTriggerActuatorMessage
+from .comb_connector import CombConnector, PlaySoundfileOnActuator
 from .comb_mapper import CombMapper
 from .experimental_control import ExperimentalControl
 from .statistics import Statistics
@@ -28,18 +29,37 @@ def world_angle_to_direction_string(world_angle):
 class HiveSide:
     """In case a single frame is recorded from both sides, they need separate dance clustering and homography mappings."""
 
-    def __init__(self, cam_id, log_fn, print_fn, comb_config, azimuth_updater, suppression_signal_index):
+    def __init__(self, cam_id, log_fn, print_fn, comb_config, azimuth_updater,
+                    suppression_soundfile_index,
+                    suppression_signal_index,
+                    suppression_signal_duration,
+                    use_all_actuators):
         self.cam_id = cam_id
         self.log_fn = log_fn
         self.print_fn = print_fn
         self.azimuth_updater = azimuth_updater
+        self.suppression_soundfile_index = suppression_soundfile_index
         self.suppression_signal_index = suppression_signal_index
+        self.suppression_signal_duration = suppression_signal_duration
+        self.use_all_actuators = use_all_actuators
 
         self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn)
         self.comb_mapper = CombMapper(config=comb_config, azimuth_updater=azimuth_updater, print_fn=self.print_fn)
 
     def close(self):
         pass
+    
+    def get_activation_message(self, actuator_index):
+
+        if self.use_all_actuators:
+            actuator_index = None
+
+        return PlaySoundfileOnActuator(
+                actuator_index=actuator_index,
+                file_index=self.suppression_soundfile_index,
+                signal_index=self.suppression_signal_index,
+                duration=self.suppression_signal_duration
+        )
 
     def process(self, waggle_info):
         coordinates = self.dance_detector.process(waggle_info)
@@ -55,13 +75,13 @@ class HiveSide:
                 world_direction, world_angle / np.pi * 180.0, waggle_duration, self.cam_id,
                 waggle_angle / np.pi * 180.0, waggle_angle_orig / np.pi * 180.0, self.azimuth_updater.get_azimuth() / np.pi * 180.0))
 
-            yield world_angle, CombTriggerActuatorMessage(idx, signal_index=self.suppression_signal_index, side=1)
+            yield world_angle, self.get_activation_message(idx)
 
 
 class Bridge:
     def __init__(
         self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file, no_gui=False,
-        sound_index=0
+        sound_index=0, signal_index=1, all_actuators=False, signal_duration=1.0
     ):
         self.wdd_port = wdd_port
         self.wdd_authkey = wdd_authkey
@@ -112,7 +132,10 @@ class Bridge:
                 print_fn=self.print_fn,
                 comb_config=camera_config,
                 azimuth_updater=self.azimuth_updater,
-                suppression_signal_index=sound_index,
+                suppression_soundfile_index=sound_index,
+                suppression_signal_index=signal_index,
+                suppression_signal_duration=signal_duration,
+                use_all_actuators=all_actuators,
             )
         print("Loaded configs for {} cameras.".format(len(self.cameras)))
 
@@ -204,7 +227,7 @@ class Bridge:
                 import pytz
                 from .wdd_listener import Waggle
                 waggle = Waggle(
-                        600, 400, 104 / 180.0 * np.pi, 0.42, pytz.UTC.localize(datetime.datetime.now()), "cam1", uuid=0
+                        600, 200, 104 / 180.0 * np.pi, 0.42, pytz.UTC.localize(datetime.datetime.now()), "cam0", uuid=0
                     )
                 self.wdd.incoming_queue.put(waggle)
 
@@ -267,11 +290,13 @@ class Bridge:
                             xy, char=char, color=side_colors[side_index]
                         )
 
-            for (x, y) in any_side.comb_mapper.get_sensor_coordinates():
+            for actuator_index, (x, y) in enumerate(any_side.comb_mapper.get_sensor_coordinates()):
+                is_active = self.comb.is_actuator_active(actuator_index)
+
                 draw_at_comb_position(
                     np.array([x, y]),
                     char="X",
-                    color=asciimatics.screen.Screen.COLOUR_BLUE,
+                    color=asciimatics.screen.Screen.COLOUR_BLUE if not is_active else asciimatics.screen.Screen.COLOUR_YELLOW,
                 )
 
             screen.print_at(

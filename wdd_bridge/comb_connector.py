@@ -12,6 +12,9 @@ class CombActuatorMessage:
     def is_deactivation_message(self):
         return False
 
+    def __str__(self):
+        return str(self.__class__.__name__) + "(???)"
+
 class SetLEDsMessage(CombActuatorMessage):
 
     def __init__(self, config):
@@ -20,36 +23,173 @@ class SetLEDsMessage(CombActuatorMessage):
 
         self.config = config
     
-    def __str__(self):
+    def get_serial_message(self):
         return "LEDS {}".format(self.config)
 
-class CombTriggerActuatorMessage(CombActuatorMessage):
-    # The default constructor deactivates the signal for the given actuator.
-    def __init__(
-        self, actuator_index, signal_duration=1.0, signal_index=None, side=None
-    ):
-        self.actuator_index = actuator_index
-        self.signal_duration = signal_duration
-        self.signal_index = signal_index
-        self.side = side
-
     def __str__(self):
-        if self.is_deactivation_message():
-            return "mux {} 0".format(self.actuator_index)
-        return "mux {} {} {}".format(self.actuator_index, self.signal_index, self.side)
+        return "SetLEDsMessage(config={})".format(self.config)
+
+class ActuatorSignalSelectionMessage(CombActuatorMessage):
+
+    def __init__(self, actuator_index, signal_index=0):
+
+        if not (actuator_index >= 0 and actuator_index <= 7):
+            raise ValueError("Actuator index must be in range [0, 7], got {}.".format(actuator_index))
+
+        if not (signal_index >= 0 and signal_index <= 4):
+            raise ValueError("Signal index must be in range [0, 4], got {}.".format(signal_index))
+
+        self.actuator_index = actuator_index
+        self.signal_index = signal_index
 
     def is_deactivation_message(self):
-        return not self.signal_index
+        return self.signal_index == 0
+    
+    def get_actuator_index(self):
+        return self.actuator_index
 
-    def is_activation_message(self):
-        return not self.is_deactivation_message()
+    def get_serial_message(self):
+        return "mux {} {}".format(self.actuator_index, self.signal_index)
+
+    def __str__(self):
+        return "ActuatorSignalSelectionMessage(actuator_index={}, signal_index={})".format(
+            self.actuator_index, self.signal_index)
+
+class StopTriggerMessage(CombActuatorMessage):
+
+    def __init__(self):
+        pass
+
+    def is_deactivation_message(self):
+        return True
+    
+    def get_actuator_index(self):
+        return None
+
+    def get_serial_message(self):
+        return "stop_trig"
+
+    def __str__(self):
+        return "StopTriggerMessage()"
+
+class TriggerMessage(CombActuatorMessage):
+
+    def __init__(self, file_index0=None, file_index1=None, duration=1.0):
+
+        if file_index0 is None:
+            file_index0 = 11
+        if file_index1 is None:
+            file_index1 = 11
+
+        for file_index in (file_index0, file_index1):
+            if not (file_index >= 0 and file_index <= 11):
+                raise ValueError("File index must be in range [0, 11], got {}.".format(file_index))
+
+        self.file_index0 = file_index0
+        self.file_index1 = file_index1
+        self.duration = duration
+
+    def is_deactivation_message(self):
+        # We are only working with one sound board now..
+        return self.file_index0 == 11
+
+    def get_actuator_index(self):
+        return None
 
     def get_deactivation_message(self):
-        return self.signal_duration, CombTriggerActuatorMessage(self.actuator_index)
+        return self.duration, StopTriggerMessage()
+
+    def get_serial_message(self):
+        return "trig {} {}".format(self.file_index0, self.file_index0)
+
+    def __str__(self):
+        return "TriggerMessage(file_index0={}, file_index1={}, duration={})".format(
+            self.file_index0, self.file_index1, self.duration)
+
+class LinkAllActuatorsToSignal(CombActuatorMessage):
+
+    def __init__(self, signal_index):
+        self.signal_index = signal_index
+
+    def get_serial_message(self):
+        return [ActuatorSignalSelectionMessage(i, signal_index=self.signal_index) for i in range(8)]
+
+    def is_deactivation_message(self):
+        return self.signal_index == 0
+
+    def get_actuator_index(self):
+        return None
+
+    def __str__(self):
+        return "LinkAllActuatorsToSignal(signal_index={})".format(
+            self.signal_index)
+
+class DisableAllActuators(LinkAllActuatorsToSignal):
+
+    def __init__(self):
+        super().__init__(signal_index = 0)
+
+    def __str__(self):
+        return "DisableAllActuators()"
+        
+class StopSoundfileOnActuator(CombActuatorMessage):
+
+    def __init__(self, actuator_index):
+
+        self.actuator_index = actuator_index
+
+    def is_deactivation_message(self):
+        return True
 
     def get_actuator_index(self):
         return self.actuator_index
 
+    def get_serial_message(self):
+        
+        output = [StopTriggerMessage()]
+
+        if self.actuator_index is None:
+            output.append(DisableAllActuators())
+        else:
+            output.append(ActuatorSignalSelectionMessage(self.actuator_index, signal_index=0))
+        
+        return output
+
+    def __str__(self):
+        return "StopSoundfileOnActuator(actuator_index={})".format(
+            self.actuator_index)
+
+class PlaySoundfileOnActuator(CombActuatorMessage):
+
+    def __init__(self, actuator_index, file_index, signal_index, duration=1.0):
+        self.actuator_index = actuator_index
+        self.file_index = file_index
+        self.signal_index = signal_index
+        self.duration = duration
+
+    def is_activation_message(self):
+        return True
+    
+    def get_actuator_index(self):
+        return self.actuator_index
+
+    def get_deactivation_message(self):
+        return self.duration, StopSoundfileOnActuator(self.actuator_index)
+
+    def get_serial_message(self):
+        output = []
+        if self.actuator_index is None:
+            output.append(LinkAllActuatorsToSignal(self.signal_index))
+        else:
+            output.append(ActuatorSignalSelectionMessage(self.actuator_index, self.signal_index))
+
+        output.append(TriggerMessage(self.file_index, duration=self.duration))
+
+        return output
+
+    def __str__(self):
+        return "PlaySoundfileOnActuator(actuator_index={}, file_index={}, signal_index={}, duration={})".format(
+            self.actuator_index, self.file_index, self.signal_index, self.duration)
 
 class Actuator:
     """We need to keep a virtual sensor map around so two simultaneuos signals for one sensor don't interefere."""
@@ -106,16 +246,25 @@ class CombConnector:
         run_fn = self.run_connector
         if self.audio_file is not None:
             run_fn = self.run_local_audio_mode
+        elif self.dummy_mode:
+            # When we don't connect to a serial port, we process messages directly.
+            run_fn = self.process_queue_for_serial_connection
 
+        self.running = True
         self.listener_thread = threading.Thread(target=run_fn, args=())
         self.listener_thread.daemon = True
         self.listener_thread.start()
 
         if not self.dummy_mode:
+
             # Can be unjoinable.
             led_flashing_thread = threading.Thread(target=self.flash_leds, args=())
             led_flashing_thread.daemon = True
             led_flashing_thread.start()
+
+        # Start with all unlinked and stopped.
+        self.send_message(StopTriggerMessage())
+        self.send_message(DisableAllActuators())
 
     def flash_leds(self):
         time.sleep(0.5)
@@ -141,14 +290,12 @@ class CombConnector:
         audio = simpleaudio.WaveObject.from_wave_file(self.audio_file)
         audio_replay = None
 
-        self.running = True
-
         self.print_fn("Comb: Running in audio-only mode...")
 
         while self.running:
 
             message = self.output_queue.get()
-            if message is None or not self.running:
+            if message is None or not self.running or not message.is_activation_message():
                 break
             
             is_still_playing = (audio_replay is not None) and (audio_replay.is_playing())
@@ -165,10 +312,21 @@ class CombConnector:
                 except Exception as e:
                     self.print_fn("Error when playing sound! {}: {}".format(type(e).__name__, str(e)))
 
+    def process_queue_for_serial_connection(self):
+        assert self.dummy_mode or self.con.isOpen()
+
+        while self.running:
+
+            message = self.output_queue.get()
+            if message is None or not self.running:
+                break
+
+            if self.con is not None and not self.con.isOpen():
+                self.print_fn("Comb: Serial connection broken. Message dropped.")
+                break
+            self._send_serial_message(message)
 
     def run_connector(self):
-
-        self.running = True
 
         while self.running:
 
@@ -182,17 +340,8 @@ class CombConnector:
                 return
 
             self.print_fn("Comb: Opened serial connection.")
-
-            while True:
-
-                message = self.output_queue.get()
-                if message is None:
-                    break
-
-                if not self.con.isOpen():
-                    self.print_fn("Comb: Serial connection broken. Message dropped.")
-                    break
-                self._send_serial_message(message)
+            self.process_queue_for_serial_connection()
+            
 
     def send_message(self, message):
         self.output_queue.put(message)
@@ -204,10 +353,23 @@ class CombConnector:
             time.sleep(delay)
             self.output_queue.put(deactivation_message)
 
+        def actuator_index_to_actuators(selected_actuator_index):
+
+            selected_actuators = self.actuators
+            actuator_label = "all actuators"
+            if selected_actuator_index is not None:
+                selected_actuators = [selected_actuators[selected_actuator_index]]
+                actuator_label = "actuator {}".format(selected_actuator_index)
+
+            return selected_actuators, actuator_label
         if message.is_activation_message():
 
             delay, deactivation_message = message.get_deactivation_message()
-            self.actuators[message.get_actuator_index()].set_active_for(delay)
+
+            selected_actuators, actuator_label = actuator_index_to_actuators(message.get_actuator_index())
+
+            for actuator in selected_actuators:
+                actuator.set_active_for(delay)
 
             scheduling_thread = threading.Thread(
                 target=schedule_deactivation,
@@ -215,23 +377,46 @@ class CombConnector:
                 kwargs=dict(),
             )
             scheduling_thread.start()
+
+            self.print_fn("Triggering {} for {:3.2f} s".format(actuator_label, delay))
+
         elif message.is_deactivation_message():
             # Only deactivate if no other message activated it in the meantime.
-            if self.actuators[message.get_actuator_index()].is_active():
-                self.print_fn("Skipping actuator deactivation.")
-                return
+            selected_actuators, actuator_label = actuator_index_to_actuators(message.get_actuator_index())
+            for actuator in selected_actuators:
+                if actuator.is_active():
+                    self.print_fn("Skipping actuator deactivation.")
+                    return
+            
+        serial_messages = [message]
 
-        message = str(message).upper()
+        while len(serial_messages) > 0:
+            message = serial_messages.pop(0)
 
-        self.log_fn(
-            "serial message", text=message, character_delay=self.character_delay
-        )
+            # A message can recursively be made from other messages.
+            if not isinstance(message, str):
+                message = message.get_serial_message()
 
-        message = message + "\n\r"
+                if isinstance(message, str):
+                    message = [message]
 
-        if not self.character_delay:
-            self.con.write(message)
-        else:
+                serial_messages = message + serial_messages
+                continue
+
+            message = str(message).upper()
+
+            self.log_fn(
+                "serial message", text=message, character_delay=self.character_delay
+            )
+
+            message = message + "\n\r"
+
             for char in message:
-                self.con.write(char.encode("utf-8"))
-                time.sleep(self.character_delay)
+                if self.con is not None:
+                    self.con.write(char.encode("utf-8"))
+
+                if self.character_delay:
+                    time.sleep(self.character_delay)
+
+    def is_actuator_active(self, actuator_index):
+        return self.actuators[actuator_index].is_active()

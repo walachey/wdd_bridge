@@ -37,6 +37,22 @@ import click
     default=0,
     type=click.IntRange(0, 11)
 )
+@click.option(
+    "--signal-index",
+    help="Index of the signal to use for suppression (1-4). Corresponds to the 2 x 2 audio channels of the sound boards.",
+    default=1,
+    type=click.IntRange(1, 5)
+)
+@click.option(
+    "--all-actuators",
+    help="Play signal on all actuators simultaneously.",
+)
+@click.option(
+    "--signal-duration",
+    default=1.0,
+    type=float,
+    help="Duration of the signal in seconds.",
+)
 def main(**kwargs):
 
     print("Initializing bridge..", flush=True)
