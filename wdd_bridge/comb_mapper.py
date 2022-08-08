@@ -10,8 +10,9 @@ class CombMapper:
         self.actuators = []
         for conf in config["actuators"]:
             actuator_index = int(conf["name"][-1])
-            self.actuators.append((actuator_index, (conf["x"], conf["y"])))
-        self.actuators = [xy for (_, xy) in sorted(self.actuators)]
+            self.actuators.append((actuator_index, conf))
+        self.actuator_metadata = [conf for (_, conf) in sorted(self.actuators)]
+        self.actuators = [(conf["x"], conf["y"]) for conf in self.actuator_metadata]
         
         self.pixel_coordinates = np.array(config["homography"]["pixels"]).reshape(4, 2)
         self.unit_coordinates = np.array(config["homography"]["units"]).reshape(4, 2)
@@ -35,6 +36,9 @@ class CombMapper:
 
         self.azimuth_updater = azimuth_updater
 
+    def get_actuator_metadata(self):
+        return self.actuator_metadata
+        
     def get_origin(self):
         return self.origin_x, self.origin_y
 

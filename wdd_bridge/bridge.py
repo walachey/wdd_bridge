@@ -33,6 +33,7 @@ class HiveSide:
                     suppression_signal_index,
                     suppression_signal_duration,
                     use_all_actuators,
+                    use_hardwired_signals,
                     detector_kws={}):
         self.cam_id = cam_id
         self.log_fn = log_fn
@@ -42,14 +43,44 @@ class HiveSide:
         self.suppression_signal_index = suppression_signal_index
         self.suppression_signal_duration = suppression_signal_duration
         self.use_all_actuators = use_all_actuators
+        self.use_hardwired_signals = use_hardwired_signals
 
         self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn, **detector_kws)
         self.comb_mapper = CombMapper(config=comb_config, azimuth_updater=azimuth_updater, print_fn=self.print_fn)
 
+        self.hardwired_signals = []
+        if self.use_hardwired_signals:
+            for idx, config in enumerate(self.comb_mapper.get_actuator_metadata()):
+                soundboard_set = "soundboard_index" in config
+                sound_set = "sound_index" in config
+
+                # Either both or non have to be set.
+                if soundboard_set != sound_set:
+                    raise ValueError("In hardwired mode, both 'soundboard_index' and 'sound_index' have to be set for an actuator (or none of both). Check config for actuator {}.".format(idx))
+
+                if not soundboard_set:
+                    self.hardwired_signals.append(None)
+                    continue
+
+                try:
+                    soundboard_index = int(config["soundboard_index"])
+                    sound_index = int(config["sound_index"])
+                    trigger_message = [None, None]
+                    trigger_message[soundboard_index] = sound_index
+                except Exception as e:
+                    raise ValueError("'soundboard_index' or 'sound_index' got invalid value for actuator {}.".format(idx))
+                
+                self.hardwired_signals.append(TriggerMessage(*trigger_message,
+                            duration=self.suppression_signal_duration,
+                            manual_actuator_index=idx))
+                
     def close(self):
         pass
     
     def get_activation_message(self, actuator_index):
+
+        if self.use_hardwired_signals:
+            return self.hardwired_signals[actuator_index]
 
         if self.use_all_actuators:
             return TriggerMessage(file_index0=self.suppression_soundfile_index, duration=self.suppression_signal_duration)
@@ -80,7 +111,7 @@ class HiveSide:
 class Bridge:
     def __init__(
         self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file, no_gui=False,
-        sound_index=0, signal_index=1, all_actuators=False, signal_duration=1.0,
+        sound_index=0, signal_index=1, all_actuators=False, hardwired_signals=False, signal_duration=1.0,
         waggle_max_gap=7.0, waggle_min_count=3, waggle_max_distance=200.0
     ):
         self.wdd_port = wdd_port
@@ -136,6 +167,7 @@ class Bridge:
                 suppression_signal_index=signal_index,
                 suppression_signal_duration=signal_duration,
                 use_all_actuators=all_actuators,
+                use_hardwired_signals=hardwired_signals,
                 detector_kws=dict(
                     waggle_max_gap=waggle_max_gap,
                     waggle_min_count=waggle_min_count,
@@ -205,6 +237,9 @@ class Bridge:
 
                 for world_angle, message in messages:
                     
+                    if message is None:
+                        continue
+
                     if self.experimental_control is not None:
                         message = self.experimental_control.filter_message(message, world_angle)
                     

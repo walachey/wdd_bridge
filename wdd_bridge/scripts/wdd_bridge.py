@@ -49,6 +49,11 @@ import click
     help="Play signal on all actuators simultaneously.",
 )
 @click.option(
+    "--hardwired-signals",
+    is_flag=True,
+    help="Assume signals (i.e. channels) have been hardwired to the actuators. Then 'soundboard_index' and 'sound_index' from the actuator's config will be used to control the playback.",
+)
+@click.option(
     "--signal-duration",
     default=1.0,
     type=float,
