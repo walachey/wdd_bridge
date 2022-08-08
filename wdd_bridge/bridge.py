@@ -1,4 +1,3 @@
-from winsound import PlaySound
 from .wdd_listener import WDDListener
 from .dance_detector import DanceDetector
 from .comb_connector import CombConnector, ActuatorSignalSelectionMessage, TriggerMessage
