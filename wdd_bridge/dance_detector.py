@@ -132,16 +132,16 @@ class Dance:
 class DanceDetector:
     def __init__(
         self,
-        min_distance=200.0,
-        min_delay=7.0,
-        min_waggles=3,
+        waggle_max_distance=200.0,
+        waggle_max_gap=7.0,
+        waggle_min_count=3,
         print_fn=None,
         log_fn=None,
     ):
 
-        self.min_distance = min_distance
-        self.min_delay = min_delay
-        self.min_waggles = min_waggles
+        self.waggle_max_distance = waggle_max_distance
+        self.waggle_max_gap = waggle_max_gap
+        self.waggle_min_count = waggle_min_count
 
         self.open_dances = []
         self.print_fn = print_fn
@@ -162,20 +162,20 @@ class DanceDetector:
         for idx, dance in enumerate(self.open_dances):
             last_waggle_timestamp = dance.get_last_timestamp()
             offset = (waggle.timestamp - last_waggle_timestamp).total_seconds()
-            if offset > self.min_delay or offset < 0:
+            if offset > self.waggle_max_gap or offset < 0:
                 indices_to_delete.append(idx)
                 continue
 
-            if dance.get_min_distance(waggle.x, waggle.y) > self.min_distance:
+            if dance.get_min_distance(waggle.x, waggle.y) > self.waggle_max_distance:
                 continue
 
             dance.append(waggle)
-            if len(dance) >= 2:
+            if len(dance) >= self.waggle_min_count:
                 dance_angle = dance.get_dance_angle()
                 dance_duration = dance.get_waggle_duration()
                 n_inliers = dance.get_dance_angle_inliers()
 
-                if n_inliers >= self.min_waggles:
+                if n_inliers >= self.waggle_min_count:
                     dance.trigger()
 
                     self.log_fn(

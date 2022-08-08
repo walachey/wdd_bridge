@@ -33,7 +33,8 @@ class HiveSide:
                     suppression_soundfile_index,
                     suppression_signal_index,
                     suppression_signal_duration,
-                    use_all_actuators):
+                    use_all_actuators,
+                    detector_kws={}):
         self.cam_id = cam_id
         self.log_fn = log_fn
         self.print_fn = print_fn
@@ -43,7 +44,7 @@ class HiveSide:
         self.suppression_signal_duration = suppression_signal_duration
         self.use_all_actuators = use_all_actuators
 
-        self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn)
+        self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn, **detector_kws)
         self.comb_mapper = CombMapper(config=comb_config, azimuth_updater=azimuth_updater, print_fn=self.print_fn)
 
     def close(self):
@@ -80,7 +81,8 @@ class HiveSide:
 class Bridge:
     def __init__(
         self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file, no_gui=False,
-        sound_index=0, signal_index=1, all_actuators=False, signal_duration=1.0
+        sound_index=0, signal_index=1, all_actuators=False, signal_duration=1.0,
+        waggle_max_gap=7.0, waggle_min_count=3, waggle_max_distance=200.0
     ):
         self.wdd_port = wdd_port
         self.wdd_authkey = wdd_authkey
@@ -135,6 +137,11 @@ class Bridge:
                 suppression_signal_index=signal_index,
                 suppression_signal_duration=signal_duration,
                 use_all_actuators=all_actuators,
+                detector_kws=dict(
+                    waggle_max_gap=waggle_max_gap,
+                    waggle_min_count=waggle_min_count,
+                    waggle_max_distance=waggle_max_distance,
+                )
             )
         print("Loaded configs for {} cameras.".format(len(self.cameras)))
 

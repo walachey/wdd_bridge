@@ -54,6 +54,24 @@ import click
     type=float,
     help="Duration of the signal in seconds.",
 )
+@click.option(
+    "--waggle-max-distance",
+    default=200.0,
+    type=float,
+    help="Maximum distance in pixels between successive waggles to be considered one dance.",
+)
+@click.option(
+    "--waggle-max-gap",
+    default=7.0,
+    type=float,
+    help="Maximum time between two successive waggles to be considered one dance.",
+)
+@click.option(
+    "--waggle-min-count",
+    default=3,
+    type=click.IntRange(2),
+    help="Minimum number of waggles in a dance with a similar angle to trigger a signal.",
+)
 def main(**kwargs):
 
     print("Initializing bridge..", flush=True)
