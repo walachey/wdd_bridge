@@ -188,6 +188,7 @@ class Bridge:
             print_fn=print_fn,
             log_fn=self.log_fn,
             all_actuators=all_actuators,
+            hardwired_signals=hardwired_signals,
             signal_index=signal_index,
             sound_index=sound_index
         )

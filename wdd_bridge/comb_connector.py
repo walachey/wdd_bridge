@@ -232,7 +232,7 @@ class Actuator:
 class CombConnector:
 
     def __init__(self, port, actuator_count, print_fn, log_fn, character_delay=0.001,
-                all_actuators=False, signal_index=0, sound_index=0):
+                all_actuators=False, hardwired_signals=False, signal_index=0, sound_index=0):
 
         self.audio_file = None
         if port.endswith(".wav"):
@@ -278,7 +278,11 @@ class CombConnector:
             led_flashing_thread.daemon = True
             led_flashing_thread.start()
 
-        if all_actuators:
+        if hardwired_signals:
+            # When we have hardcoded signals and soundfile indices,
+            # we just stop everything at the start.
+            self.send_message(StopTriggerMessage())
+        elif all_actuators:
             # All actuators are always playing at the same time?
             # Then, we link them to the correct signal here.
             self.send_message(StopTriggerMessage())
