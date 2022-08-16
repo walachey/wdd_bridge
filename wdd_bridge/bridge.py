@@ -35,6 +35,7 @@ class HiveSide:
                     suppression_signal_duration,
                     use_all_actuators,
                     use_hardwired_signals,
+                    use_soundboard=(0,),
                     detector_kws={}):
         self.cam_id = cam_id
         self.log_fn = log_fn
@@ -45,6 +46,7 @@ class HiveSide:
         self.suppression_signal_duration = suppression_signal_duration
         self.use_all_actuators = use_all_actuators
         self.use_hardwired_signals = use_hardwired_signals
+        self.use_soundboard = use_soundboard
 
         self.dance_detector = DanceDetector(print_fn=print_fn, log_fn=self.log_fn, **detector_kws)
         self.comb_mapper = CombMapper(config=comb_config, azimuth_updater=azimuth_updater, print_fn=self.print_fn)
@@ -99,7 +101,10 @@ class HiveSide:
             return self.hardwired_signals[actuator_index]
 
         if self.use_all_actuators:
-            return TriggerMessage(file_index0=self.suppression_soundfile_index, duration=self.suppression_signal_duration)
+            indices = [None, None]
+            for i in self.use_soundboard:
+                indices[i] = self.suppression_soundfile_index
+            return TriggerMessage(*indices, duration=self.suppression_signal_duration)
 
         return ActuatorSignalSelectionMessage(
                 actuator_index=actuator_index,
@@ -128,8 +133,11 @@ class Bridge:
     def __init__(
         self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file, no_gui=False,
         sound_index=0, signal_index=1, all_actuators=False, hardwired_signals=False, signal_duration=1.0,
-        waggle_max_gap=7.0, waggle_min_count=3, waggle_max_distance=200.0
+        waggle_max_gap=7.0, waggle_min_count=3, waggle_max_distance=200.0, use_soundboard=[]
     ):
+        if use_soundboard is None or len(use_soundboard) == 0:
+            use_soundboard = (0,)
+
         self.wdd_port = wdd_port
         self.wdd_authkey = wdd_authkey
         self.comb_port = comb_port
@@ -184,6 +192,7 @@ class Bridge:
                 suppression_signal_duration=signal_duration,
                 use_all_actuators=all_actuators,
                 use_hardwired_signals=hardwired_signals,
+                use_soundboard=use_soundboard,
                 detector_kws=dict(
                     waggle_max_gap=waggle_max_gap,
                     waggle_min_count=waggle_min_count,
@@ -206,7 +215,8 @@ class Bridge:
             all_actuators=all_actuators,
             hardwired_signals=hardwired_signals,
             signal_index=signal_index,
-            sound_index=sound_index
+            sound_index=sound_index,
+            use_soundboard=use_soundboard
         )
 
         self.screen = None

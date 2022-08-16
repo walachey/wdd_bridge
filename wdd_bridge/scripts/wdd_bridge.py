@@ -32,6 +32,12 @@ import click
     help="Do not present a graphical user interface. Might be useful for debugging purposes.",
 )
 @click.option(
+    "--use-soundboard",
+    type=click.IntRange(0, 1),
+    multiple=True,
+    help="Soundboard to use in single or all-actuators mode. Can be passed multiple times to use both soundboards. Defaults to 0."
+)
+@click.option(
     "--sound-index",
     help="Number of the sound file on the sound board to play on suppression (0-10).",
     default=0,

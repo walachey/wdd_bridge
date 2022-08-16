@@ -238,7 +238,7 @@ class Actuator:
 class CombConnector:
 
     def __init__(self, port, actuator_count, print_fn, log_fn, character_delay=0.001,
-                all_actuators=False, hardwired_signals=False, signal_index=0, sound_index=0):
+                all_actuators=False, hardwired_signals=False, signal_index=0, sound_index=0, use_soundboard=(0,)):
 
         self.audio_file = None
         if port.endswith(".wav"):
@@ -296,7 +296,10 @@ class CombConnector:
         else:
             # Otherwise, we can unlink all actuators but already play the signal.
             self.send_message(DisableAllActuators())
-            self.send_message(TriggerMessage(file_index0=sound_index, duration=None))
+            indices = [None, None]
+            for i in use_soundboard:
+                indices[i] = sound_index
+            self.send_message(TriggerMessage(*indices, duration=None))
 
 
 
