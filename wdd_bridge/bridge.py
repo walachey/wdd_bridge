@@ -263,15 +263,26 @@ class Bridge:
             screen.clear_buffer(7, 2, 0)
 
             ev = screen.get_key()
+            is_number_key = ev is not None and (ev >= ord("0") and ev <= ord("9"))
+
             if ev in (ord("Q"), ord("q")):
                 self.stop()
                 print("Aborting!", flush=True)
                 return
-            elif ev in (ord("t"), ord("T")):
+            elif ev in (ord("t"), ord("T")) or is_number_key:
                 import pytz
                 from .wdd_listener import Waggle
+                x, y = 600, 200
+
+                if is_number_key:
+                    index = ev - ord("0")
+                    w, h = any_side.comb_mapper.get_image_shape()
+                    cols = 5
+                    y = (1 + 2 * (index // cols)) * h / 4.0
+                    x = (2 + (index % cols)) * (w / (cols + 2))
+
                 waggle = Waggle(
-                        600, 200, 104 / 180.0 * np.pi, 0.42, pytz.UTC.localize(datetime.datetime.now()), "cam0", uuid=0
+                        x, y, 104 / 180.0 * np.pi, 0.42, pytz.UTC.localize(datetime.datetime.now()), "cam0", uuid=0
                     )
                 self.wdd.incoming_queue.put(waggle)
 
