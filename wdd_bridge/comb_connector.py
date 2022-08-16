@@ -97,7 +97,13 @@ class TriggerMessage(CombActuatorMessage):
         self.file_index0 = file_index0
         self.file_index1 = file_index1
         self.duration = duration
-        self.manual_actuator_index = manual_actuator_index
+        self.set_actuator_index(manual_actuator_index)
+
+    def set_actuator_index(self, index):
+        """
+        Can be None (all actuators), an integer (actuator index) or a list of integers.
+        """
+        self.manual_actuator_index = index
 
     def is_deactivation_message(self):
         return self.file_index0 == 11 and self.file_index1 == 11
@@ -387,8 +393,10 @@ class CombConnector:
             selected_actuators = self.actuators
             actuator_label = "all actuators"
             if selected_actuator_index is not None:
-                selected_actuators = [selected_actuators[selected_actuator_index]]
-                actuator_label = "actuator {}".format(selected_actuator_index)
+                if not isinstance(selected_actuator_index, list):
+                    selected_actuator_index = [selected_actuator_index]
+                selected_actuators = [selected_actuators[i] for i in selected_actuator_index]
+                actuator_label = "actuator {}".format("+".join(map(str, selected_actuator_index)))
 
             return selected_actuators, actuator_label
 
@@ -399,6 +407,7 @@ class CombConnector:
             if deactivation_message is not None:
                 selected_actuators, actuator_label = message_to_actuator_label(message)
 
+                all_are_active = all((a.is_active() for a in selected_actuators))
                 for actuator in selected_actuators:
                     actuator.set_active_for(delay)
 
@@ -409,6 +418,10 @@ class CombConnector:
                 )
                 scheduling_thread.start()
 
+                if all_are_active:
+                    self.print_fn("Holding {} for {:3.2f} s more".format(actuator_label, delay))
+                    return
+
                 self.print_fn("Triggering {} for {:3.2f} s".format(actuator_label, delay))
 
         elif message.is_deactivation_message():
@@ -416,7 +429,7 @@ class CombConnector:
             selected_actuators, actuator_label = message_to_actuator_label(message)
             for actuator in selected_actuators:
                 if actuator.is_active():
-                    self.print_fn("Skipping actuator deactivation.")
+                    self.log_fn("Skipping actuator deactivation.")
                     return
             
         serial_messages = [message]

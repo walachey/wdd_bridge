@@ -45,6 +45,9 @@ class CombMapper:
     def get_actuator_count(self):
         return len(self.actuators)
 
+    def get_image_shape(self):
+        return np.max(self.pixel_coordinates, axis=0)
+        
     def get_comb_rectangle(self):
         return (
             self.unit_coordinates[:, 0].min(),

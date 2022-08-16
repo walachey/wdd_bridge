@@ -8,6 +8,7 @@ from .azimuth import AzimuthUpdater
 
 import asciimatics
 import asciimatics.screen
+import collections
 import datetime
 import json
 import numpy as np
@@ -49,6 +50,9 @@ class HiveSide:
         self.comb_mapper = CombMapper(config=comb_config, azimuth_updater=azimuth_updater, print_fn=self.print_fn)
 
         self.hardwired_signals = []
+
+        signal_groups = collections.defaultdict(list)
+
         if self.use_hardwired_signals:
             for idx, config in enumerate(self.comb_mapper.get_actuator_metadata()):
                 soundboard_set = "soundboard_index" in config
@@ -73,6 +77,18 @@ class HiveSide:
                 self.hardwired_signals.append(TriggerMessage(*trigger_message,
                             duration=self.suppression_signal_duration,
                             manual_actuator_index=idx))
+
+                signal_groups[tuple(trigger_message)].append(idx)
+            
+            if len(signal_groups) > 0:
+                max_actuators_in_group = max([len(g) for g in signal_groups.values()])
+                if max_actuators_in_group > 1:
+                    groups_label = []
+                    for signal, indices in signal_groups.items():
+                        groups_label.append("+".join(map(str, indices)) + " " + str(signal))
+                        for index in indices:
+                            self.hardwired_signals[index].set_actuator_index(indices)
+                    self.print_fn("Found {} actuator groups: {}.".format(len(signal_groups), ", ".join(groups_label)))
                 
     def close(self):
         pass
