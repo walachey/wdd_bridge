@@ -68,6 +68,10 @@ class WDDListener:
                     del self.connections[i]
                     break
 
+                label = message.get("predicted_class_label", None)
+                if label and label != "waggle":
+                    continue
+
                 if "timestamp_waggle" in message:
                     angle = None
                     duration = None
