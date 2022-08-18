@@ -76,9 +76,11 @@ class HiveSide:
                 except Exception as e:
                     raise ValueError("'soundboard_index' or 'sound_index' got invalid value for actuator {}.".format(idx))
                 
-                self.hardwired_signals.append(TriggerMessage(*trigger_message,
+                message_args = trigger_message
+                message_kwargs = dict(
                             duration=self.suppression_signal_duration,
-                            manual_actuator_index=idx))
+                            manual_actuator_index=idx)
+                self.hardwired_signals.append((message_args, message_kwargs))
 
                 signal_groups[tuple(trigger_message)].append(idx)
             
@@ -89,7 +91,7 @@ class HiveSide:
                     for signal, indices in signal_groups.items():
                         groups_label.append("+".join(map(str, indices)) + " " + str(signal))
                         for index in indices:
-                            self.hardwired_signals[index].set_actuator_index(indices)
+                            self.hardwired_signals[index][1]["manual_actuator_index"] = indices
                     self.print_fn("Found {} actuator groups: {}.".format(len(signal_groups), ", ".join(groups_label)))
                 
     def close(self):
@@ -98,7 +100,8 @@ class HiveSide:
     def get_activation_message(self, actuator_index):
 
         if self.use_hardwired_signals:
-            return self.hardwired_signals[actuator_index]
+            args, kwargs = self.hardwired_signals[actuator_index]
+            return TriggerMessage(*args, **kwargs)
 
         if self.use_all_actuators:
             indices = [None, None]

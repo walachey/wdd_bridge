@@ -12,6 +12,12 @@ class CombActuatorMessage:
     def is_deactivation_message(self):
         return False
 
+    def merge_with_soundboard_trigger_state(self, state: list):
+        pass
+    
+    def get_new_soundboard_state(self):
+        return None
+
     def __str__(self):
         return str(self.__class__.__name__) + "(???)"
 
@@ -75,23 +81,52 @@ class StopTriggerMessage(CombActuatorMessage):
     def get_actuator_index(self):
         return None
 
+    def get_new_soundboard_state(self):
+        return [None, None]
+
     def get_serial_message(self):
         return "stop_trig"
 
     def __str__(self):
         return "StopTriggerMessage()"
 
+class StopSelectedSoundboardMessage(CombActuatorMessage):
+
+    def __init__(self, soundboard_index, manual_actuator_index=None):
+
+        self.soundboard_index = soundboard_index
+        self.command_arguments = [None, None]
+        self.command_arguments[self.soundboard_index] = 11
+
+        self.manual_actuator_index = manual_actuator_index
+
+    def is_deactivation_message(self):
+        return True
+
+    def get_actuator_index(self):
+        return self.manual_actuator_index
+    
+    def merge_with_soundboard_trigger_state(self, state: list):
+
+        for i in range(len(self.command_arguments)):
+            if self.command_arguments[i] is None:
+                self.command_arguments[i] = state[i]
+
+    def get_new_soundboard_state(self):
+        return [(c if c is not None else 11) for c in self.command_arguments]
+
+    def get_serial_message(self):
+        return "trig {} {}".format(*self.get_new_soundboard_state())
+
+    def __str__(self):
+        return "StopSelectedSoundboardMessage(soundboard_index={}, actuators={})".format(self.soundboard_index, self.manual_actuator_index)
+
 class TriggerMessage(CombActuatorMessage):
 
     def __init__(self, file_index0=None, file_index1=None, duration=1.0, manual_actuator_index=None):
 
-        if file_index0 is None:
-            file_index0 = 11
-        if file_index1 is None:
-            file_index1 = 11
-
         for file_index in (file_index0, file_index1):
-            if not (file_index >= 0 and file_index <= 11):
+            if not (file_index is None or (file_index >= 0 and file_index <= 11)):
                 raise ValueError("File index must be in range [0, 11], got {}.".format(file_index))
 
         self.file_index0 = file_index0
@@ -118,14 +153,38 @@ class TriggerMessage(CombActuatorMessage):
     def get_deactivation_message(self):
         if self.duration is None:
             return None, None
-        return self.duration, StopTriggerMessage()
+
+        message = None
+        active = [(s is not None and s != 11) for s in [self.file_index0, self.file_index1]]
+        if all(active):
+            message = StopTriggerMessage()
+        elif not any(active):
+            return None, None
+        else:
+            active_index = [i for i in range(len(active)) if active[i]][0]
+            message = StopSelectedSoundboardMessage(active_index, self.get_actuator_index())
+
+        return self.duration, message
+
+    def merge_with_soundboard_trigger_state(self, state: list):
+        
+        if self.file_index0 is None:
+            self.file_index0 = state[0]
+
+        if self.file_index1 is None:
+            self.file_index1 = state[1]
+
+    def get_new_soundboard_state(self):
+        state = [self.file_index0, self.file_index1]
+        state = [(a if a is not None else 11) for a in state]
+        return state
 
     def get_serial_message(self):
-        return "trig {} {}".format(self.file_index0, self.file_index1)
+        return "trig {} {}".format(*self.get_new_soundboard_state())
 
     def __str__(self):
-        return "TriggerMessage(file_index0={}, file_index1={}, duration={})".format(
-            self.file_index0, self.file_index1, self.duration)
+        return "TriggerMessage(file_index0={}, file_index1={}, duration={}, actuators={})".format(
+            self.file_index0, self.file_index1, self.duration, self.get_actuator_index())
 
 class LinkAllActuatorsToSignal(CombActuatorMessage):
 
@@ -153,67 +212,8 @@ class DisableAllActuators(LinkAllActuatorsToSignal):
     def __str__(self):
         return "DisableAllActuators()"
         
-class StopSoundfileOnActuator(CombActuatorMessage):
-
-    def __init__(self, actuator_index):
-
-        self.actuator_index = actuator_index
-
-    def is_deactivation_message(self):
-        return True
-
-    def get_actuator_index(self):
-        return self.actuator_index
-
-    def get_serial_message(self):
-        
-        output = [StopTriggerMessage()]
-
-        if self.actuator_index is None:
-            output.append(DisableAllActuators())
-        else:
-            output.append(ActuatorSignalSelectionMessage(self.actuator_index, signal_index=0))
-        
-        return output
-
-    def __str__(self):
-        return "StopSoundfileOnActuator(actuator_index={})".format(
-            self.actuator_index)
-
-class PlaySoundfileOnActuator(CombActuatorMessage):
-
-    def __init__(self, actuator_index, file_index, signal_index, duration=1.0):
-        self.actuator_index = actuator_index
-        self.file_index = file_index
-        self.signal_index = signal_index
-        self.duration = duration
-
-    def is_activation_message(self):
-        return True
-    
-    def get_actuator_index(self):
-        return self.actuator_index
-
-    def get_deactivation_message(self):
-        return self.duration, StopSoundfileOnActuator(self.actuator_index)
-
-    def get_serial_message(self):
-        output = []
-        if self.actuator_index is None:
-            output.append(LinkAllActuatorsToSignal(self.signal_index))
-        else:
-            output.append(ActuatorSignalSelectionMessage(self.actuator_index, self.signal_index))
-
-        output.append(TriggerMessage(self.file_index, duration=self.duration))
-
-        return output
-
-    def __str__(self):
-        return "PlaySoundfileOnActuator(actuator_index={}, file_index={}, signal_index={}, duration={})".format(
-            self.actuator_index, self.file_index, self.signal_index, self.duration)
-
 class Actuator:
-    """We need to keep a virtual sensor map around so two simultaneuos signals for one sensor don't interefere."""
+    """We need to keep a virtual sensor map around so two simultaneuos signals for one sensor don't interfere."""
 
     def __init__(self):
         self.active_until = None
@@ -224,7 +224,7 @@ class Actuator:
 
         if dt is None:
             dt = datetime.datetime.utcnow()
-        return (self.active_until - dt).total_seconds() > 0e-3
+        return (self.active_until - dt).total_seconds() > 0.1
 
     def set_active_for(self, seconds):
         self.set_active_until(
@@ -246,6 +246,8 @@ class CombConnector:
             port = ""
 
         self.actuators = [Actuator() for i in range(actuator_count)]
+        self.current_soundboard_state = [None, None]
+
         self.character_delay = character_delay
         self.dummy_mode = not port
 
@@ -383,7 +385,7 @@ class CombConnector:
     def send_message(self, message):
         self.output_queue.put(message)
 
-    def _send_serial_message(self, message):
+    def _send_serial_message(self, message: CombActuatorMessage):
 
         # Potentially schedule deactivation.
         def schedule_deactivation(delay, deactivation_message):
@@ -434,7 +436,14 @@ class CombConnector:
                 if actuator.is_active():
                     self.log_fn("Skipping actuator deactivation.")
                     return
-            
+
+        # Especially in hardwired mode, we should not stop a signal on soundboard A just because we play one on soundboard B.
+        message.merge_with_soundboard_trigger_state(self.current_soundboard_state)
+        new_soundboard_state = message.get_new_soundboard_state()
+        if new_soundboard_state is not None:
+            self.current_soundboard_state = new_soundboard_state
+
+        # Unpack and send the message.
         serial_messages = [message]
 
         while len(serial_messages) > 0:
