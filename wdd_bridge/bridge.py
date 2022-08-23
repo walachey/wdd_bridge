@@ -100,7 +100,10 @@ class HiveSide:
     def get_activation_message(self, actuator_index):
 
         if self.use_hardwired_signals:
-            args, kwargs = self.hardwired_signals[actuator_index]
+            signal_args = self.hardwired_signals[actuator_index]
+            if signal_args is None:
+                return None
+            args, kwargs = signal_args
             return TriggerMessage(*args, **kwargs)
 
         if self.use_all_actuators:
