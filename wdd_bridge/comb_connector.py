@@ -238,13 +238,15 @@ class Actuator:
 class CombConnector:
 
     def __init__(self, port, actuator_count, print_fn, log_fn, character_delay=0.001,
-                all_actuators=False, hardwired_signals=False, signal_index=0, sound_index=0, use_soundboard=(0,)):
+                all_actuators=False, hardwired_signals=False, signal_index=0, sound_index=0, use_soundboard=(0,),
+                only_one_signal=False):
 
         self.audio_file = None
         if port.endswith(".wav"):
             self.audio_file = port
             port = ""
 
+        self.only_one_signal = only_one_signal
         self.actuators = [Actuator() for i in range(actuator_count)]
         self.current_soundboard_state = [None, None]
 
@@ -385,6 +387,9 @@ class CombConnector:
     def send_message(self, message):
         self.output_queue.put(message)
 
+    def is_any_actuator_active(self):
+        return any((a.is_active() for a in self.actuators))
+
     def _send_serial_message(self, message: CombActuatorMessage):
 
         # Potentially schedule deactivation.
@@ -413,6 +418,13 @@ class CombConnector:
                 selected_actuators, actuator_label = message_to_actuator_label(message)
 
                 all_are_active = all((a.is_active() for a in selected_actuators))
+                any_is_active = self.is_any_actuator_active()
+
+                # Only one signal permitted and some other actuators are still playing?
+                if self.only_one_signal and not all_are_active and any_is_active:
+                    self.print_fn("Skipping {} activation.".format(actuator_label))
+                    return
+
                 for actuator in selected_actuators:
                     actuator.set_active_for(delay)
 

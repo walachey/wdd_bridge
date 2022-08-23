@@ -60,6 +60,11 @@ import click
     help="Assume signals (i.e. channels) have been hardwired to the actuators. Then 'soundboard_index' and 'sound_index' from the actuator's config will be used to control the playback.",
 )
 @click.option(
+    "--only-one-signal",
+    is_flag=True,
+    help="Do not play another signal if any actuator is still active.",
+)
+@click.option(
     "--signal-duration",
     default=1.0,
     type=float,

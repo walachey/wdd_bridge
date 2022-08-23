@@ -139,7 +139,7 @@ class Bridge:
     def __init__(
         self, wdd_port, wdd_authkey, comb_port, comb_config, draw_arrows, stats_file, no_gui=False,
         sound_index=0, signal_index=1, all_actuators=False, hardwired_signals=False, signal_duration=1.0,
-        waggle_max_gap=7.0, waggle_min_count=3, waggle_max_distance=200.0, use_soundboard=[]
+        waggle_max_gap=7.0, waggle_min_count=3, waggle_max_distance=200.0, use_soundboard=[], only_one_signal=False
     ):
         if use_soundboard is None or len(use_soundboard) == 0:
             use_soundboard = (0,)
@@ -222,7 +222,8 @@ class Bridge:
             hardwired_signals=hardwired_signals,
             signal_index=signal_index,
             sound_index=sound_index,
-            use_soundboard=use_soundboard
+            use_soundboard=use_soundboard,
+            only_one_signal=only_one_signal
         )
 
         self.screen = None
