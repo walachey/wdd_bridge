@@ -387,10 +387,11 @@ class Bridge:
                     color=asciimatics.screen.Screen.COLOUR_BLUE if not is_active else asciimatics.screen.Screen.COLOUR_YELLOW,
                 )
 
+            current_azimuth = self.azimuth_updater.get_azimuth()
             screen.print_at(
-                "{} -- sun at {}".format(
+                "{} -- sun at {} ({:3.1f}°)".format(
                     datetime.datetime.utcnow().isoformat(),
-                    world_angle_to_direction_string(self.azimuth_updater.get_azimuth())
+                    world_angle_to_direction_string(current_azimuth), current_azimuth / np.pi * 180
                 ),
                 1,
                 1,

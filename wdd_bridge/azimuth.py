@@ -59,7 +59,7 @@ class AzimuthUpdater:
     def get_azimuth(self):
 
         # Fetch latest update.
-        while self.update_queue.full():
+        while not self.update_queue.empty():
             update = self.update_queue.get()
             self.latest_azimuth = update
 
