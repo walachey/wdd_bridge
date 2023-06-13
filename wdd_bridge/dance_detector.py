@@ -128,6 +128,9 @@ class Dance:
         if durations.shape[0] == 0:
             return np.nan
         return np.median(durations)
+    
+    def get_first_waggle_id(self):
+        return self.waggle_ids[0]
 
 class DanceDetector:
     def __init__(
@@ -189,7 +192,7 @@ class DanceDetector:
                         waggle_ids=dance.waggle_ids
                     )
 
-                    yield (waggle.x, waggle.y, dance_angle, dance_duration)
+                    yield (waggle.x, waggle.y, dance_angle, dance_duration, dance.get_first_waggle_id())
 
 
             added = True

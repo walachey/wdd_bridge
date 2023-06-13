@@ -136,16 +136,29 @@ class HiveSide:
     def process(self, waggle_info):
         coordinates = self.dance_detector.process(waggle_info)
 
-        for (x, y, waggle_angle, waggle_duration) in coordinates:
+        for (x, y, waggle_angle, waggle_duration, first_waggle_id) in coordinates:
             
             waggle_angle_orig = waggle_angle
             xy, (waggle_angle, world_angle), (idx, distance) = self.comb_mapper.map_to_comb(x, y, waggle_angle)
 
             world_direction = world_angle_to_direction_string(world_angle)
+            azimuth = self.azimuth_updater.get_azimuth()
+
+            self.log_fn(
+                "decoded dance",
+                world_direction=world_direction,
+                world_angle=world_angle,
+                dance_duration=waggle_duration,
+                cam_id=self.cam_id,
+                dance_angle_to_gravity=waggle_angle,
+                dance_angle_raw=waggle_angle_orig,
+                azimuth=azimuth,
+                first_waggle_id=first_waggle_id
+            )
 
             self.print_fn("Dance for {} ({:1.1f}°), {:1.2f}s ('{}', grav. {:1.1f}° [raw {:1.1f}°, az. {:1.1f}°])".format(
                 world_direction, world_angle / np.pi * 180.0, waggle_duration, self.cam_id,
-                waggle_angle / np.pi * 180.0, waggle_angle_orig / np.pi * 180.0, self.azimuth_updater.get_azimuth() / np.pi * 180.0))
+                waggle_angle / np.pi * 180.0, waggle_angle_orig / np.pi * 180.0, azimuth / np.pi * 180.0))
 
             yield (world_angle,
                    lambda remapping_keys: self.get_activation_message(idx, remapping_keys=remapping_keys))
