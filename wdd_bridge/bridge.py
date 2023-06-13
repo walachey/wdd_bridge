@@ -54,6 +54,7 @@ class HiveSide:
         self.hardwired_signals = []
 
         signal_groups = collections.defaultdict(list)
+        signal_groups_identifiers = dict()
 
         if self.use_hardwired_signals:
             for idx, config in enumerate(self.comb_mapper.get_actuator_metadata()):
@@ -69,27 +70,28 @@ class HiveSide:
                     continue
 
                 try:
-                    soundboard_index = int(config["soundboard_index"])
-                    sound_index = int(config["sound_index"])
-                    trigger_message = [None, None]
-                    trigger_message[soundboard_index] = sound_index
+                    soundboard_index = config["soundboard_index"]
+                    sound_index = config["sound_index"]
+
+                    trigger_message = {soundboard_index: sound_index}
                 except Exception as e:
                     raise ValueError("'soundboard_index' or 'sound_index' got invalid value for actuator {}.".format(idx))
                 
-                message_args = trigger_message
                 message_kwargs = dict(
                             duration=self.suppression_signal_duration,
                             manual_actuator_index=idx)
-                self.hardwired_signals.append((message_args, message_kwargs))
+                self.hardwired_signals.append((trigger_message, message_kwargs))
 
-                signal_groups[tuple(trigger_message)].append(idx)
+                signal_group_key = hash(frozenset(trigger_message.items()))
+                signal_groups[signal_group_key].append(idx)
+                signal_groups_identifiers[signal_group_key] = str(trigger_message)
             
             if len(signal_groups) > 0:
                 max_actuators_in_group = max([len(g) for g in signal_groups.values()])
                 if max_actuators_in_group > 1:
                     groups_label = []
-                    for signal, indices in signal_groups.items():
-                        groups_label.append("+".join(map(str, indices)) + " " + str(signal))
+                    for signal_group_key, indices in signal_groups.items():
+                        groups_label.append("+".join(map(str, indices)) + " " + signal_groups_identifiers[signal_group_key])
                         for index in indices:
                             self.hardwired_signals[index][1]["manual_actuator_index"] = indices
                     self.print_fn("Found {} actuator groups: {}.".format(len(signal_groups), ", ".join(groups_label)))
@@ -97,24 +99,37 @@ class HiveSide:
     def close(self):
         pass
     
-    def get_activation_message(self, actuator_index):
-
+    def get_activation_message(self, actuator_index, remapping_keys):
+        
+        def try_remap(value):
+            if value in remapping_keys:
+                value = remapping_keys[value]
+            try:
+                value = int(value)
+            except Exception as e:
+                raise ValueError("Could not remap actuator/soundboard index ({}) - not found in config?".format(value))
+            return value
+        
         if self.use_hardwired_signals:
             signal_args = self.hardwired_signals[actuator_index]
             if signal_args is None:
                 return None
-            args, kwargs = signal_args
-            return TriggerMessage(*args, **kwargs)
+            trigger_parameters, kwargs = signal_args
+            indices = [None, None]
+            for soundboard_id, signal_id in trigger_parameters.items():
+                indices[try_remap(soundboard_id)] = try_remap(signal_id)
+            return TriggerMessage(*indices, **kwargs)
 
         if self.use_all_actuators:
             indices = [None, None]
             for i in self.use_soundboard:
-                indices[i] = self.suppression_soundfile_index
+                i = try_remap(i)
+                indices[i] = try_remap(self.suppression_soundfile_index)
             return TriggerMessage(*indices, duration=self.suppression_signal_duration)
 
         return ActuatorSignalSelectionMessage(
-                actuator_index=actuator_index,
-                signal_index=self.suppression_signal_index,
+                actuator_index=try_remap(actuator_index),
+                signal_index=try_remap(self.suppression_signal_index),
                 duration=self.suppression_signal_duration
         )
 
@@ -132,7 +147,8 @@ class HiveSide:
                 world_direction, world_angle / np.pi * 180.0, waggle_duration, self.cam_id,
                 waggle_angle / np.pi * 180.0, waggle_angle_orig / np.pi * 180.0, self.azimuth_updater.get_azimuth() / np.pi * 180.0))
 
-            yield world_angle, self.get_activation_message(idx)
+            yield (world_angle,
+                   lambda remapping_keys: self.get_activation_message(idx, remapping_keys=remapping_keys))
 
 
 class Bridge:
@@ -267,15 +283,15 @@ class Bridge:
                 if waggle_cam_id not in self.cameras:
                     self.print_fn("Received waggle for invalid camera ID.")
 
-                messages = self.cameras[waggle_cam_id].process(waggle_info)
+                messages_factories = self.cameras[waggle_cam_id].process(waggle_info)
 
-                for world_angle, message in messages:
+                for world_angle, message_factory in messages_factories:
                     
-                    if message is None:
+                    if message_factory is None:
                         continue
 
                     if self.experimental_control is not None:
-                        message = self.experimental_control.filter_message(message, world_angle)
+                        message = self.experimental_control.filter_message(message_factory, world_angle)
                     
                     if message is not None:
                         self.log_fn("sending comb message", what=str(message))
