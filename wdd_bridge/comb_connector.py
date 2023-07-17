@@ -252,17 +252,9 @@ class CombConnector:
 
         self.character_delay = character_delay
         self.dummy_mode = not port
+        self.port = port
 
-        if not self.dummy_mode:
-            self.con = serial.Serial(
-                port=port,
-                baudrate=9600,
-                parity=serial.PARITY_ODD,
-                stopbits=serial.STOPBITS_TWO,
-                bytesize=serial.SEVENBITS,
-            )
-        else:
-            self.con = None
+        self.setup_connection()
 
         self.print_fn = print_fn
         self.log_fn = log_fn
@@ -305,7 +297,18 @@ class CombConnector:
                 indices[i] = sound_index
             self.send_message(TriggerMessage(*indices, duration=None))
 
+    def setup_connection(self):
 
+        if not self.dummy_mode:
+            self.con = serial.Serial(
+                port=self.port,
+                baudrate=9600,
+                parity=serial.PARITY_ODD,
+                stopbits=serial.STOPBITS_TWO,
+                bytesize=serial.SEVENBITS,
+            )
+        else:
+            self.con = None
 
     def flash_leds(self):
         time.sleep(0.5)
@@ -365,7 +368,14 @@ class CombConnector:
             if self.con is not None and not self.con.isOpen():
                 self.print_fn("Comb: Serial connection broken. Message dropped.")
                 break
-            self._send_serial_message(message)
+            
+            try:
+                self._send_serial_message(message)
+            except Exception as e:
+                self.print_fn("Error when writing to serial connection: {}".format(str(e)))
+                break
+
+
 
     def run_connector(self):
 
